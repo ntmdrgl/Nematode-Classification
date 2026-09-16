@@ -19,30 +19,30 @@ class ConvBlock(nn.Module):
 
 
 class FCN(nn.Module):
-    def __init__(self, input_size, hidden_sizes, kernel_sizes, output_size, dropout=0.2):
+    def __init__(self, in_channels, hidden_size, kernel_size, output_size, dropout=0.2):
         super().__init__()
 
-        if len(hidden_sizes) != len(kernel_sizes):
-            raise ValueError("hidden_sizes and kernel_sizes must have the same length")
+        if len(hidden_size) != len(kernel_size):
+            raise ValueError("hidden_size and kernel_size must have the same length")
 
-        self.input_size = input_size
-        self.hidden_sizes = hidden_sizes
-        self.kernel_sizes = kernel_sizes
+        self.in_channels = in_channels
+        self.hidden_size = hidden_size
+        self.kernel_size = kernel_size
         self.output_size = output_size
 
         layers = []
-        in_channels = input_size
+        in_channels = in_channels
 
-        for hidden_size, kernel_size in zip(hidden_sizes, kernel_sizes):
+        for h_size, kernel_size in zip(hidden_size, kernel_size):
             layers.append(
                 ConvBlock(
                     in_channels=in_channels,
-                    out_channels=hidden_size,
+                    out_channels=h_size,
                     kernel_size=kernel_size,
                     dropout=dropout,
                 )
             )
-            in_channels = hidden_size
+            in_channels = h_size
 
         self.features = nn.Sequential(*layers)
 
@@ -50,11 +50,11 @@ class FCN(nn.Module):
         self.global_pool = nn.AdaptiveAvgPool1d(1)
 
         # Classification layer
-        self.classifier = nn.Linear(hidden_sizes[-1], output_size)
+        self.classifier = nn.Linear(hidden_size[-1], output_size)
 
     def forward(self, x):
         """
-        x: (batch_size, seq_length, input_size)
+        x: (batch_size, seq_length, in_channels)
         """
 
         # Conv1d expects (batch, channels, seq_length)

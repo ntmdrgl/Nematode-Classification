@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 import torch
+import torch.nn as nn
 
 CFG = SimpleNamespace(
     # General
@@ -14,11 +15,12 @@ CFG = SimpleNamespace(
     dropout=None,
 
     # Training
-    epochs=100,
+    epochs=50,
     batch_size=4,
     learning_rate=1e-4,
     weight_decay=1e-2,
     patience=5,
+    criterion = nn.CrossEntropyLoss(),
 
     # Dataset 
     num_classes=2,
@@ -31,4 +33,5 @@ CFG = SimpleNamespace(
     label_csv="nematode_dataset_label.csv",
 
     # Output / Logging
+    output_dir="checkpoints"
 )

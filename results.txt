@@ -1,0 +1,36 @@
+=================================================================
+Cross-Validation Statistics (All Classes)
+=================================================================
+Fold Results
+Fold  1: Epoch  50 | Test Loss: 0.1258 | Test Accuracy: 100.00%
+Fold  2: Epoch  50 | Test Loss: 0.4984 | Test Accuracy: 85.71%
+Fold  3: Epoch  50 | Test Loss: 3.4733 | Test Accuracy: 50.00%
+Fold  4: Epoch  50 | Test Loss: 0.5642 | Test Accuracy: 83.33%
+Fold  5: Epoch  50 | Test Loss: 1.3688 | Test Accuracy: 66.67%
+
+==========================================
+fcn                  Mean (%)    Std (%)
+------------------------------------------
+mutant-1                90.00      20.00
+mutant-2                80.00      16.33
+wild                    70.00      40.00
+Overall                 77.14      17.21
+==========================================
+
+=================================================================
+Cross-Validation Statistics (Mutant vs Wild)
+=================================================================
+Fold Results
+Fold  1: Epoch  50 | Test Loss: 0.2100 | Test Accuracy: 85.71%
+Fold  2: Epoch  50 | Test Loss: 0.2683 | Test Accuracy: 85.71%
+Fold  3: Epoch  50 | Test Loss: 0.2707 | Test Accuracy: 83.33%
+Fold  4: Epoch  50 | Test Loss: 0.0945 | Test Accuracy: 100.00%
+Fold  5: Epoch  50 | Test Loss: 0.7254 | Test Accuracy: 66.67%
+
+==========================================
+fcn                  Mean (%)    Std (%)
+------------------------------------------
+mutant                  86.00      11.58
+wild                    80.00      40.00
+Overall                 84.29      10.61
+==========================================
