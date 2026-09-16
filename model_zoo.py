@@ -1,0 +1,8 @@
+MODEL_ZOO = {
+    "fcn": {
+        "in_channels": 16,
+        "hidden_size": [128, 256, 128],
+        "kernel_size": [7, 5, 3],
+        "dropout": 0.2, 
+    }
+}
