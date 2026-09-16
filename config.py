@@ -22,10 +22,11 @@ CFG = SimpleNamespace(
 
     # Dataset 
     num_classes=None,
+    num_folds=5,
     segment_size=None,
 
     # Data paths
-    dataset_root="data",
+    data_root="data",
     data_mat="nematode_dataset_data.mat",
     label_csv="nematode_dataset_label.csv",
 

@@ -4,6 +4,7 @@ torch
 torchvision
 
 scikit-learn
+scipy
 numpy
 pandas
 matplotlib

@@ -1,7 +1,7 @@
 import argparse
 from config import CFG
-from cli import parse_args
-from model_zoo import MODEL_ZOO
+from utils.cli import parse_args
+from models.model_zoo import MODEL_ZOO
 
 def setup_config():
     # Setup Config from Command Line arguments and Model Zoo
@@ -9,7 +9,7 @@ def setup_config():
 
     # Main arguments
     CFG.model_name      = args.model
-    CFG.dataset_root    = args.data_root
+    CFG.data_root       = args.data_root
     CFG.data_mat        = args.data
     CFG.label_csv       = args.label
 
@@ -34,16 +34,16 @@ def setup_config():
 if __name__ == "__main__":
     setup_config()
 
-    print(f"model: {CFG.model_name}")
-    print(f"in_channels: {CFG.in_channels}")
-    print(f"hidden_size: {CFG.hidden_size}")
-    print(f"kernel_size: {CFG.kernel_size}")
-    print(f"dropout: {CFG.dropout}")
+    print("model:", CFG.model_name)
+    print("in_channels:", CFG.in_channels)
+    print("hidden_size:", CFG.hidden_size)
+    print("kernel_size:", CFG.kernel_size)
+    print("dropout:", CFG.dropout)
 
-    print(f"\nepochs: {CFG.epochs}")
-    print(f"batch_size: {CFG.batch_size}")
-    print(f"learning_rate: {CFG.learning_rate}")
-    print(f"weight_decay: {CFG.weight_decay}")
-    print(f"patience: {CFG.patience}")
+    print("\nepochs:", CFG.epochs)
+    print("batch_size:", CFG.batch_size)
+    print("learning_rate:", CFG.learning_rate)
+    print("weight_decay:", CFG.weight_decay)
+    print("patience:", CFG.patience)
 
-    print(f"\nsegment_size: {CFG.segment_size}")
+    print("\nsegment_size:", CFG.segment_size)

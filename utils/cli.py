@@ -6,7 +6,7 @@ def parse_args():
 
     # Main arguments
     parser.add_argument("--model", type=str, default=CFG.model_name)
-    parser.add_argument("--data_root", type=str, default=CFG.dataset_root)
+    parser.add_argument("--data_root", type=str, default=CFG.data_root)
     parser.add_argument("--data", type=str, default=CFG.data_mat)
     parser.add_argument("--label", type=str, default=CFG.label_csv)
 
@@ -25,6 +25,7 @@ def parse_args():
 
     # Dataset
     parser.add_argument("--segment_size", type=int, default=CFG.segment_size)
+    parser.add_argument("--num_folds", type=int, default=CFG.num_folds)
 
     # Output / Logging
 
