@@ -21,9 +21,9 @@ CFG = SimpleNamespace(
     patience=5,
 
     # Dataset 
-    num_classes=None,
+    num_classes=2,
     num_folds=5,
-    segment_size=None,
+    segment_size=336,
 
     # Data paths
     data_root="data",
