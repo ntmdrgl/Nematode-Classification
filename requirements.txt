@@ -1,11 +1,12 @@
 --extra-index-url https://download.pytorch.org/whl/cu128
 
-torch
-torchvision
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
 
 scikit-learn
 scipy
 numpy
 pandas
+omegaconf
 matplotlib
 jupyterlab

@@ -1,0 +1,27 @@
+device: auto
+seed: 42
+model_name: fcn
+hidden_size:
+- 128
+- 256
+- 128
+kernel_size:
+- 7
+- 5
+- 3
+dropout: 0.2
+in_channels: 16
+num_classes: 3
+epochs: 50
+batch_size: 4
+learning_rate: 0.0001
+weight_decay: 0.01
+patience: 5
+loss: cross_entropy
+data_dir: data
+data_file: nematode_dataset_data.mat
+label_file: nematode_dataset_label.csv
+seq_length: 336
+num_folds: 5
+output_dir: results
+save_best_model: false

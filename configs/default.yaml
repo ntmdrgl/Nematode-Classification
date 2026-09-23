@@ -1,0 +1,32 @@
+# runtime
+device: auto
+seed: 42
+
+# model
+model_name:  null
+hidden_size: null
+kernel_size: null
+dropout:     null
+in_channels: null # determined by dataset at runtime
+num_classes: null # ^ 
+
+# training
+epochs: 50
+batch_size: 4
+learning_rate: 0.0001
+weight_decay: 0.01
+patience: 5
+loss: cross_entropy
+
+# data
+data_dir: data
+data_file: nematode_dataset_data.mat
+label_file: nematode_dataset_label.csv
+seq_length: null # determined by dataset at runtime
+
+# cross validation
+num_folds: 5
+
+# output
+output_dir: results
+save_best_model: false # saves last epoch if false
