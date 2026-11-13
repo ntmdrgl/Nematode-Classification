@@ -3,6 +3,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
+from sklearn.model_selection import train_test_split
+
 def load_dataset(data_path):
     with np.load(data_path, allow_pickle=False) as data:
         X_train = torch.as_tensor(data["X_train"], dtype=torch.float32)
@@ -11,6 +13,32 @@ def load_dataset(data_path):
         y_test = torch.as_tensor(data["y_test"], dtype=torch.long)
 
     return X_train, y_train, X_test, y_test
+
+def create_validation_split(
+    X_train,
+    y_train,
+    val_fraction,
+    seed
+):
+    if not 0 < val_fraction < 1:
+        raise ValueError("val_fraction must be between 0 and 1.")
+
+    train_indices, val_indices = train_test_split(
+        np.arange(len(y_train)),
+        test_size=val_fraction,
+        random_state=seed,
+        stratify=y_train.numpy(),
+    )
+
+    train_indices = torch.as_tensor(train_indices, dtype=torch.long)
+    val_indices = torch.as_tensor(val_indices, dtype=torch.long)
+
+    return (
+        X_train[train_indices],
+        y_train[train_indices],
+        X_train[val_indices],
+        y_train[val_indices],
+    )
 
 def create_training_loader(
     X_train,

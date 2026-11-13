@@ -2,12 +2,25 @@ defaults:
   - _self_
   - override hydra/job_logging: disabled # prevents .log generation
 
-datapath: data/eigenworms.npz
+data_path: data/eigenworms.npz
 
-seed: 42
-model: fcn
+model: dilated_fcn
+
+model_params:
+  in_channels: 6
+  num_classes: 5
+  hidden_size: 100
 
 batch_size: 16
+epochs: 50
+learning_rate: 0.0001
+weight_decay: 0.01
+
+class_weighted_loss: false
+
+patience: 5
+
+seed: 42
 
 hydra:
   run:
