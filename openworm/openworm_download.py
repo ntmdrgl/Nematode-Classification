@@ -70,7 +70,7 @@ except ImportError:
     from openworm_strain_filter import load_records, matches_download_filter, strain_group, read_csv
 
 ROOT = Path(__file__).resolve().parent
-OUTPUT = Path("E:/openworm")
+OUTPUT = Path("E:/nematode classification/openworm")
 BAR_FORMAT = "{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed} elapsed, ETA {remaining}, {rate_fmt}]{postfix}"
 
 
@@ -102,6 +102,7 @@ def encode_download_url(url):
 
 
 def build_plan(metadata_csv, parsed_csv, output_dir, min_count=10, kind="video-features", strain=None, max_records=None):
+    tqdm.write("Loading metadata and selecting qualifying records...", file=sys.stderr)
     records = load_records(metadata_csv, parsed_csv)
     selected = [row for row in records if matches_download_filter(row)]
     counts = Counter(strain_group(row) for row in selected)
@@ -114,7 +115,7 @@ def build_plan(metadata_csv, parsed_csv, output_dir, min_count=10, kind="video-f
     by_id = {row["record_id"]: row for row in metadata}
     plan = []
     paths = set()
-    for row in selected:
+    for row in tqdm(selected, desc="Preparing downloads", unit="record", bar_format=BAR_FORMAT):
         group, record_id = strain_group(row), row["record_id"]
         meta = by_id[record_id]
         names, sizes, urls = [list_cell(meta[key]) for key in ("file_names", "file_sizes", "file_links")]
@@ -150,6 +151,14 @@ def local_bytes(file):
     if offset > size:
         raise ValueError(f"Partial file exceeds expected size: {partial}")
     return offset
+
+
+def existing_bytes(plan):
+    """Show progress while checking completed and partial files on the drive."""
+    total = 0
+    for record in tqdm(plan, desc="Checking existing files", unit="record", bar_format=BAR_FORMAT):
+        total += sum(local_bytes(file) for file in record["files"])
+    return total
 
 
 class DownloadCancelled(Exception):
@@ -262,7 +271,7 @@ def run(plan, output_dir, retries, workers=4):
     output_dir.mkdir(parents=True, exist_ok=True)
     with download_lock(output_dir):
         total = sum(file["size"] for record in plan for file in record["files"])
-        initial = sum(local_bytes(file) for record in plan for file in record["files"])
+        initial = existing_bytes(plan)
         if shutil.disk_usage(output_dir).free < total - initial:
             raise OSError("Insufficient free disk space for this plan; use --file-type or --max-records")
         failures = 0
@@ -344,7 +353,7 @@ def main(argv=None):
     plan = build_plan(args.metadata_csv, args.parsed_csv, args.output_dir.resolve(), args.min_count,
                       args.file_type, args.strain, args.max_records)
     total = sum(file["size"] for record in plan for file in record["files"])
-    existing = sum(local_bytes(file) for record in plan for file in record["files"])
+    existing = existing_bytes(plan)
     print(json.dumps(dict(strain_groups=len({record['strain'] for record in plan}), records=len(plan),
                           files=sum(len(record['files']) for record in plan), file_type=args.file_type, workers=args.workers,
                           total_GiB=round(total / 2**30, 2), remaining_GiB=round((total-existing) / 2**30, 2),

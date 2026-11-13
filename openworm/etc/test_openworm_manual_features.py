@@ -10,6 +10,13 @@ import openworm_manual_features as script
 
 
 class FeatureTests(unittest.TestCase):
+    def test_observed_values_are_not_smoothed(self):
+        times = np.arange(7)*.04
+        values = np.array([0., 0., 10., 0., 7., 0., 0.])
+        _, result, status = script.preprocess_feature(times, values, np.ones(7, bool))
+        np.testing.assert_array_equal(result, values)
+        self.assertTrue(np.all(status == "real"))
+
     def test_excludes_ids_timestamps_categories_and_flags(self):
         table = np.zeros(1, dtype=[("worm_index", "f4"), ("timestamp", "f4"),
             ("skeleton_id", "f4"), ("motion_modes", "f4"), ("has_skeleton", "?"),
@@ -21,7 +28,7 @@ class FeatureTests(unittest.TestCase):
         values = np.arange(16, dtype=float)
         values[2:4] = np.nan
         values[6:12] = np.nan
-        grid, result, status = script.preprocess_feature(times, values, np.ones(16, bool), time_window=1, polyorder=0)
+        grid, result, status = script.preprocess_feature(times, values, np.ones(16, bool))
         np.testing.assert_allclose(grid, times)
         np.testing.assert_allclose(result[2:4], [2, 3])
         self.assertTrue(np.all(status[2:4] == "interpolated"))
@@ -39,7 +46,7 @@ class FeatureTests(unittest.TestCase):
 
     def test_orientation_interpolates_across_180_not_through_zero(self):
         _, result, status = script.preprocess_feature(np.array([0., .04, .08]),
-            np.array([179., np.nan, -179.]), np.ones(3, bool), angular=True, time_window=1, polyorder=0)
+            np.array([179., np.nan, -179.]), np.ones(3, bool), angular=True)
         self.assertAlmostEqual(abs(result[1]), 180)
         self.assertEqual(status[1], "interpolated")
 
@@ -48,7 +55,7 @@ class FeatureTests(unittest.TestCase):
         np.testing.assert_array_equal(result, 0)
         self.assertTrue(np.all(status == "zeroed"))
         _, result, status = script.preprocess_feature(np.array([0., .25]), np.array([1., 2.]),
-                                                       np.ones(2, bool), time_window=1, polyorder=0)
+                                                       np.ones(2, bool))
         self.assertTrue(np.all(status[1:] == "zeroed"))
 
 

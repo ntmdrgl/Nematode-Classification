@@ -1,5 +1,43 @@
 # OpenWorm CSV generation, strain counts and downloads
 
+Build just one NPZ dataset:
+
+```powershell
+python openworm/openworm_dataset.py --dataset skeleton_angles
+python openworm/openworm_dataset.py --dataset manual_features
+python openworm/openworm_dataset.py --dataset eigenworms
+python openworm/openworm_dataset.py --dataset matlab_features
+```
+
+Each mode requires only its own source CSV folder and replaces only its selected
+NPZ file. Eigenworms uses the eigen-projection columns in `data/manual_features`.
+Omit `--dataset`, or use `--dataset all`, to build all four with the existing
+cross-dataset record/time alignment checks.
+
+Process skeleton-angle or manual-feature records in parallel:
+
+```powershell
+python openworm/openworm_skeleton_angles.py --workers 4
+python openworm/openworm_manual_features.py --workers 4
+```
+
+The default is one worker. Each worker handles one record in a separate process
+and opens its own HDF5 files. Parallel runs show one combined total ETA without
+competing per-worker progress bars; records can finish in a different order.
+Only a worker-sized set of records is queued. Ctrl+C cancels queued work and
+waits for active records to finish. CSV output matches sequential processing.
+Start with 2–4 workers and consider CPU cores, RAM usage, and disk bandwidth.
+Do not run two instances targeting the same output folders simultaneously.
+
+`openworm_skeleton_angles.py` and `openworm_manual_features.py` show overall
+record progress with elapsed time and estimated time remaining. The
+top bar explicitly labels this `TOTAL ETA`: time to finish all remaining records,
+using average elapsed time per completed record across the entire run. The current
+strain/record is displayed alongside it. Stage progress bars show feature
+processing (manual features) and CSV writing with their own ETAs. Overall ETA
+becomes available after the first record finishes and is an estimate based on
+completed records; different record lengths can change it.
+
 Extract the original 16 MATLAB features from video HDF5 files:
 
 ```powershell
@@ -28,12 +66,12 @@ The original coordinate indexing by video row is intentionally retained, even
 when dropped video frames exist; this preserves the old extraction algorithm.
 
 Python replaces the old unlimited filling/trimming with the common 0.04-second
-time grid, strict <0.25s gap interpolation, long/unbracketed-gap zeroing and
-temporal Savitzky–Golay smoothing. MATLAB returns original-availability masks;
+time grid, strict <0.25s gap interpolation and long/unbracketed-gap zeroing.
+No Savitzky–Golay smoothing is applied to MATLAB features. MATLAB returns original-availability masks;
 values filled solely by the old fillmissing are masked again before this step.
 Dropped video-frame positions are inserted as missing samples. The orientation
 angle uses its 180-degree period, and non-orientation outputs remain nonnegative.
-Use `--time-window`/`--polyorder` to change smoothing. For a short preview, use
+For a short preview, use
 `--max-frames 100 --output-dir data/matlab_features_preview`; leave this cap out
 when generating the full dataset. No parallel MATLAB toolbox is required.
 
@@ -107,13 +145,13 @@ misleading. Labels are `real`, `interpolated`, and `zeroed`.
 
 The script shares the skeleton-angle script's time axis and temporal processing:
 0.04s sampling, strict <0.25s interpolation, larger/unbracketed gaps set to zero,
-and Savitzky–Golay smoothing within valid runs (window 5, order 3). Invalid source
+without Savitzky–Golay smoothing. Invalid source
 skeletons mask feature values. Source skeletons receive the same 49-point spatial
 normalization for validity checks. Stored feature values are not recomputed from
 spatially smoothed skeletons, and spatial filtering is not applied across
 unrelated features. Original feature units are preserved, without mean centering.
 Orientation angles are handled across the ±180-degree boundary.
-Use `--input-dir E:/openworm`, `--output-dir PATH`, `--time-window`, or `--polyorder`
+Use `--input-dir E:/openworm` or `--output-dir PATH`
 to override defaults. Reruns overwrite the generated CSVs.
 
 Generate skeleton-angle CSVs from locally downloaded records:

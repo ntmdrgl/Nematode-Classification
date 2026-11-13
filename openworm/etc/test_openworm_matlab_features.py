@@ -42,7 +42,7 @@ class MatlabFeaturesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'features.mat'
             savemat(path,raw)
-            times,values,status=script.preprocess_extracted(loadmat(path,simplify_cells=True),1,0)
+            times,values,status=script.preprocess_extracted(loadmat(path,simplify_cells=True))
         self.assertEqual(values.shape,(16,16))
         np.testing.assert_allclose(np.diff(times),.04)
         np.testing.assert_array_equal(values[2:4,0],1)
@@ -56,7 +56,7 @@ class MatlabFeaturesTests(unittest.TestCase):
         raw['feature_values'][1,15]=-89
         raw['frame_number']=np.r_[0,np.arange(2,17)]
         raw['time_s']=raw['frame_number']*.04
-        _,values,status=script.preprocess_extracted(raw,1,0)
+        _,values,status=script.preprocess_extracted(raw)
         self.assertAlmostEqual(abs(values[1,15]),90)
         self.assertEqual(status[1,15],'interpolated')
         self.assertTrue(np.isfinite(values).all())

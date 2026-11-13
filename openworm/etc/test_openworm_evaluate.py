@@ -3,6 +3,7 @@ import csv
 import sys
 import tempfile
 import unittest
+from unittest.mock import MagicMock, patch
 from pathlib import Path
 
 import numpy as np
@@ -12,6 +13,105 @@ import openworm_evaluate as script
 
 
 class EvaluationTests(unittest.TestCase):
+    def test_individual_datasets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixtures(root)
+            expected = script.evaluate(root)
+            for dataset, filename, _, _ in script.DATASETS:
+                with self.subTest(dataset=dataset):
+                    # Unselected archives must never be opened, even if invalid.
+                    saved = {}
+                    for _, other, _, _ in script.DATASETS:
+                        if other != filename:
+                            saved[other] = (root / other).read_bytes()
+                            (root / other).write_bytes(b"invalid unselected archive")
+                    try:
+                        selected = [row for row in expected if row["dataset"] == dataset]
+                        for workers in (1, 2):
+                            self.assertEqual(script.evaluate(root, workers=workers, dataset=dataset), selected)
+                        self.assertEqual(script.evaluate(root, dataset=dataset, totals_only=True), selected[:1])
+                    finally:
+                        for other, content in saved.items():
+                            (root / other).write_bytes(content)
+
+    def test_missing_selected_dataset_does_not_evaluate_others(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixtures(root)
+            (root / script.DATASETS[0][1]).unlink()
+            with self.assertRaisesRegex(ValueError, "No dataset archives found"):
+                script.evaluate(root, dataset="skeleton_angles")
+
+    def test_invalid_dataset(self):
+        with self.assertRaisesRegex(ValueError, "Unknown dataset"):
+            script.evaluate(Path("unused"), dataset="unknown")
+
+    def test_totals_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixtures(root)
+            expected = [row for row in script.evaluate(root) if row["scope"] == "total"]
+            for workers in (1, 2):
+                self.assertEqual(script.evaluate(root, workers=workers, totals_only=True), expected)
+            (root / script.DATASETS[3][1]).unlink()
+            self.assertEqual(script.evaluate(root, totals_only=True), expected[:3])
+
+    def test_parallel_matches_serial_and_skips_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixtures(root)
+            self.assertEqual(script.evaluate(root, workers=2), script.evaluate(root))
+            (root / script.DATASETS[3][1]).unlink()
+            self.assertEqual(script.evaluate(root, workers=2), script.evaluate(root))
+
+    def test_parallel_rejects_stale_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixtures(root)
+            path = root / "skeleton_angles/a/record_1.csv"
+            with path.open(newline="") as source:
+                rows = list(csv.reader(source))
+            rows[1][1] = "99"
+            with path.open("w", newline="") as destination:
+                csv.writer(destination).writerows(rows)
+            with self.assertRaisesRegex(ValueError, "CSV values differ"):
+                script.evaluate(root, workers=2)
+
+    def test_invalid_workers(self):
+        with self.assertRaisesRegex(ValueError, "at least 1"):
+            script.evaluate(Path("unused"), workers=0)
+
+    def test_missing_datasets_and_total_progress(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixtures(root)
+            for specification in script.DATASETS[1:]:
+                (root / specification[1]).unlink()
+            progress = MagicMock()
+            with patch.object(script, "tqdm") as bar:
+                bar.return_value.__enter__.return_value = progress
+                rows = script.evaluate(root)
+            self.assertEqual(bar.call_args.kwargs["total"], 2)
+            self.assertEqual(progress.update.call_count, 2)
+            self.assertEqual(bar.write.call_count, 3)
+            self.assertEqual(len(rows), 3)
+            self.assertEqual(rows[0]["scope"], "total")
+            self.assertTrue(all(row["dataset"] == "skeleton_angles" for row in rows))
+
+    def test_no_datasets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "No dataset archives found"):
+                script.evaluate(Path(directory))
+
+    def test_missing_source_is_not_skipped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixtures(root)
+            (root / "skeleton_angles/a/record_1.csv").unlink()
+            with self.assertRaises(FileNotFoundError):
+                script.evaluate(root)
+
     def fixtures(self, root):
         manual = [f"feature_{i}" for i in range(47)]
         eigen = [f"eigen_projection_{i}" for i in range(1, 7)]

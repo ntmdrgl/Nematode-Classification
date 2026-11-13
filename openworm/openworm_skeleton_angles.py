@@ -2,6 +2,7 @@
 
 From the repository root:
     python openworm/openworm_skeleton_angles.py
+    python openworm/openworm_skeleton_angles.py --workers 4
     python openworm/openworm_skeleton_angles.py --input-dir data/openworm/test
     python openworm/openworm_skeleton_angles.py --input-dir E:/openworm
 
@@ -22,18 +23,24 @@ Short runs use the largest fitting odd window and a fitting polynomial order.
 Angles follow the supplied formula literally: arctan(dx/dy), then subtract the
 mean of the 48 angles in each frame. The result is not an atan2/unwrapped angle.
 Zero-length segments after smoothing invalidate that frame. Reruns replace CSVs.
+--workers processes independent records in separate CPU processes. The parent
+shows one total ETA; per-record stage bars are disabled during parallel runs.
 """
 
 import argparse
 import csv
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
 from pathlib import Path
 
 import h5py
 import numpy as np
+from tqdm import tqdm
 from scipy.interpolate import interp1d
 from scipy.signal import savgol_filter
 
 ROOT = Path(__file__).resolve().parents[1]
+PROGRESS_FORMAT = "{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed} elapsed, ETA {remaining}, {rate_fmt}]{postfix}"
 
 
 def read_record(path):
@@ -140,6 +147,66 @@ def preprocess(times, skeletons, space_window=5, time_window=5, polyorder=3):
     return grid, angles, valid, status
 
 
+def process_record(path, output_dir, space_window=5, time_window=5, polyorder=3, show_progress=True):
+    if not path.parent.name.startswith("record_") or len(list(path.parent.glob("*_features.hdf5"))) != 1:
+        raise ValueError("Expected one features file inside each <strain>/record_* folder")
+    times, skeletons = read_record(path)
+    times, angles, valid, status = preprocess(times, skeletons, space_window, time_window, polyorder)
+    output = output_dir / path.parent.parent.name / f"{path.parent.name}.csv"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("w", newline="", encoding="utf-8") as destination:
+        writer = csv.writer(destination)
+        writer.writerow(["time_s", "skeleton_status", *[f"angle_{i:02d}" for i in range(1, 49)]])
+        for t, state, row in tqdm(zip(times, status, angles), total=len(times),
+                                  desc="Writing angles", unit="frame", position=1, leave=False,
+                                  disable=not show_progress, bar_format=PROGRESS_FORMAT):
+            writer.writerow([f"{t:.8f}", state, *[f"{angle:.8f}" for angle in row]])
+    return f"{output}: {len(times):,} frames; {valid.sum():,} valid; {(~valid).sum():,} zero gap frames"
+
+
+def run_records(files, worker, arguments, workers, description):
+    """Bounded process pool; only the parent writes overall progress/ETA."""
+    failures = 0
+    with tqdm(total=len(files), desc=description, unit="record", smoothing=0,
+              bar_format=PROGRESS_FORMAT.replace("ETA {remaining}", "TOTAL ETA {remaining}")) as progress:
+        def completed(path, operation):
+            nonlocal failures
+            try:
+                tqdm.write(operation())
+            except Exception as error:
+                failures += 1
+                tqdm.write(f"FAILED {path}: {error}")
+            progress.set_postfix_str(f"{path.parent.parent.name}/{path.parent.name}")
+            progress.update(1)
+
+        if workers == 1:
+            for path in files:
+                completed(path, lambda: worker(path, *arguments, show_progress=True))
+        else:
+            pool = ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn"))
+            pending = {}
+            paths = iter(files)
+
+            def submit_next():
+                path = next(paths, None)
+                if path is not None:
+                    pending[pool.submit(worker, path, *arguments, show_progress=False)] = path
+            try:
+                for _ in range(min(workers, len(files))):
+                    submit_next()
+                while pending:
+                    done, _ = wait(pending, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        path = pending.pop(future)
+                        completed(path, future.result)
+                        submit_next()
+            finally:
+                for future in pending:
+                    future.cancel()
+                pool.shutdown(wait=True, cancel_futures=True)
+    return 1 if failures else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--input-dir", type=Path, default=ROOT / "data/openworm")
@@ -147,7 +214,10 @@ def main():
     parser.add_argument("--space-window", type=int, default=5)
     parser.add_argument("--time-window", type=int, default=5)
     parser.add_argument("--polyorder", type=int, default=3)
+    parser.add_argument("--workers", type=int, default=1, help="Concurrent record processes (default: 1)")
     args = parser.parse_args()
+    if args.workers < 1:
+        parser.error("--workers must be positive")
     if (args.space_window < 1 or args.space_window > 49 or args.space_window % 2 == 0
             or args.time_window < 1 or args.time_window % 2 == 0 or args.polyorder < 0
             or args.polyorder >= min(args.space_window, args.time_window)):
@@ -155,28 +225,7 @@ def main():
     files = sorted(args.input_dir.rglob("*_features.hdf5"))
     if not files:
         parser.error("No *_features.hdf5 files found")
-    failures = 0
-    for path in files:
-        try:
-            if not path.parent.name.startswith("record_"):
-                raise ValueError("Feature file must be inside <strain>/record_* folder")
-            if len(list(path.parent.glob("*_features.hdf5"))) != 1:
-                raise ValueError("Expected exactly one features file per record folder")
-            times, skeletons = read_record(path)
-            times, angles, valid, status = preprocess(times, skeletons, args.space_window, args.time_window, args.polyorder)
-            output = args.output_dir / path.parent.parent.name / f"{path.parent.name}.csv"
-            output.parent.mkdir(parents=True, exist_ok=True)
-            header = ",".join(["time_s", "skeleton_status", *[f"angle_{i:02d}" for i in range(1, 49)]])
-            with output.open("w", newline="", encoding="utf-8") as destination:
-                writer = csv.writer(destination)
-                writer.writerow(header.split(","))
-                for t, state, row in zip(times, status, angles):
-                    writer.writerow([f"{t:.8f}", state, *[f"{angle:.8f}" for angle in row]])
-            print(f"{output}: {len(times):,} frames; {valid.sum():,} valid; {(~valid).sum():,} zero gap frames")
-        except (OSError, ValueError, KeyError) as error:
-            failures += 1
-            print(f"FAILED {path}: {error}")
-    return 1 if failures else 0
+    return run_records(files, process_record, (args.output_dir, args.space_window, args.time_window, args.polyorder), args.workers, "All skeleton records")
 
 
 if __name__ == "__main__":

@@ -18,8 +18,8 @@ MATLAB retains the legacy formulas, including FPS-scaled total displacements
 and nonnegative clipping. Original missing-value masks are passed separately
 so the old unlimited fillmissing cannot hide gaps. Python restores those gaps,
 inserts dropped video frames, resamples every 0.04s, fills gaps strictly shorter
-than 0.25s, zeroes longer/unbracketed gaps, and applies the shared temporal
-Savitzky-Golay filter (window 5, order 3). Orientation has a 180-degree period.
+than 0.25s, and zeroes longer/unbracketed gaps. No Savitzky-Golay smoothing is
+applied to these features. Orientation has a 180-degree period.
 The old frame trimming/downsampling/statistical summaries are not applied.
 Reruns replace CSVs. --max-frames is for previews, not full dataset generation.
 """
@@ -62,7 +62,7 @@ def matlab_string(path):
     return "'" + Path(path).resolve().as_posix().replace("'", "''") + "'"
 
 
-def preprocess_extracted(raw, time_window=5, polyorder=3):
+def preprocess_extracted(raw):
     names = [str(name) for name in np.asarray(raw["feature_names"]).reshape(-1)]
     values = np.asarray(raw["feature_values"], dtype=float).reshape(-1, 16)
     observed = np.asarray(raw["observed_mask"], dtype=bool).reshape(values.shape)
@@ -84,15 +84,15 @@ def preprocess_extracted(raw, time_window=5, polyorder=3):
     features, statuses = [], []
     for i, name in enumerate(FEATURES):
         grid, result, status = preprocess_feature(full_times, expanded[:,i], np.ones(len(full_times), bool),
-                                                  name == "OrientationAngle", time_window, polyorder, angle_period=180)
+                                                  name == "OrientationAngle", angle_period=180)
         if name != "OrientationAngle":
-            result = np.maximum(result, 0)  # Preserve legacy nonnegative features after smoothing too.
+            result = np.maximum(result, 0)  # Preserve legacy nonnegative feature values.
         features.append(result)
         statuses.append(status)
     return grid, np.column_stack(features), np.column_stack(statuses)
 
 
-def process_record(video, output_dir, matlab, max_frames=None, time_window=5, polyorder=3):
+def process_record(video, output_dir, matlab, max_frames=None):
     with tempfile.TemporaryDirectory(prefix="openworm-matlab-") as directory:
         mat_file = Path(directory) / "features.mat"
         command = (f"addpath({matlab_string(Path(__file__).parent)}); "
@@ -100,7 +100,7 @@ def process_record(video, output_dir, matlab, max_frames=None, time_window=5, po
                    f"{max_frames if max_frames else 'inf'});")
         subprocess.run([matlab, "-wait", "-noFigureWindows", "-batch", command], check=True)
         raw = loadmat(mat_file, simplify_cells=True)
-    grid, values, statuses = preprocess_extracted(raw, time_window, polyorder)
+    grid, values, statuses = preprocess_extracted(raw)
     output = output_dir / video.parent.parent.name / f"{video.parent.name}.csv"
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8", newline="") as destination:
@@ -117,13 +117,9 @@ def main():
     parser.add_argument("--output-dir", type=Path, default=ROOT / "data/matlab_features")
     parser.add_argument("--matlab", type=Path)
     parser.add_argument("--max-frames", type=int)
-    parser.add_argument("--time-window", type=int, default=5)
-    parser.add_argument("--polyorder", type=int, default=3)
     args = parser.parse_args()
     if args.max_frames is not None and args.max_frames < 1:
         parser.error("--max-frames must be positive")
-    if args.time_window < 1 or args.time_window % 2 == 0 or not 0 <= args.polyorder < args.time_window:
-        parser.error("Time window must be positive and odd; order must be smaller and nonnegative")
     records = ([args.input_dir] if args.input_dir.name.startswith("record_") else
                sorted(path for path in args.input_dir.rglob("record_*") if path.is_dir()))
     failures = skipped = processed = 0
@@ -140,8 +136,7 @@ def main():
             if not videos[0].with_name(videos[0].stem+"_features.hdf5").exists():
                 raise ValueError("Original algorithm requires companion skeleton/contour coordinates")
             executable = executable or matlab_executable(args.matlab)
-            process_record(videos[0].resolve(), args.output_dir, executable, args.max_frames,
-                           args.time_window, args.polyorder)
+            process_record(videos[0].resolve(), args.output_dir, executable, args.max_frames)
             processed += 1
         except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
             failures += 1
