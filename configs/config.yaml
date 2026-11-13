@@ -2,7 +2,12 @@ defaults:
   - _self_
   - override hydra/job_logging: disabled # prevents .log generation
 
+datapath: data/eigenworms.npz
+
+seed: 42
 model: fcn
+
+batch_size: 16
 
 hydra:
   run:

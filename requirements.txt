@@ -5,6 +5,7 @@ torchvision
 numpy
 h5py
 scipy
+aeon
 
 # config
 hydra-core
