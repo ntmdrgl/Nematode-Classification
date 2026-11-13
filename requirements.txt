@@ -3,7 +3,12 @@ torch==2.14.1+cu130
 torchvision==0.29.1+cu130
 
 numpy
+<<<<<<< HEAD
 scikit-learn
+=======
+h5py
+scipy
+>>>>>>> 7294ccad66eda8c463f4fa98fdcdfc6ebc23c0d4
 aeon
 
 # config
