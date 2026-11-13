@@ -1,0 +1,9 @@
+numpy
+
+# config
+hydra-core
+omegaconf
+
+# display
+matplotlib
+tqdm

@@ -1,0 +1,12 @@
+results/
+
+# environment
+.venv/
+
+# pycache
+*.pyc
+
+# hydra
+.hydra/
+runs/
+multirun/
