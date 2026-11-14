@@ -1,56 +1,26 @@
-from utils.dataset import create_testing_loader
+from utils.evaluation import load_evaluation
 from utils.training import predict
-from models import create_model
 
 import csv
 from pathlib import Path
 
 from matplotlib.figure import Figure
+from matplotlib.ticker import PercentFormatter
 import numpy as np
 import torch
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, f1_score
 
 import hydra
+from hydra.utils import to_absolute_path
 from omegaconf import DictConfig, OmegaConf
-
-EIGENWORMS_CLASS_NAMES = {
-    "1": "N2 (wild type)",
-    "2": "goa-1",
-    "3": "unc-1",
-    "4": "unc-38",
-    "5": "unc-63",
-}
 
 @hydra.main(version_base="1.3", config_path="configs", config_name="config")
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
-    dataset_name = Path(cfg.data_path).stem.lower()
-    checkpoint_dir = Path("checkpoints") / f"{cfg.model}_{dataset_name}"
-    checkpoint_path = checkpoint_dir / f"{cfg.model}_{dataset_name}_best_val_loss.pt"
-    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-    saved_cfg = OmegaConf.create(checkpoint["config"])
-    num_classes = saved_cfg.model_params.num_classes
-    stats = checkpoint["normalization"]
-
-    # Only load test samples; reuse training statistics from the checkpoint.
-    with np.load(cfg.data_path, allow_pickle=False) as data:
-        X_test = torch.as_tensor(data["X_test"], dtype=torch.float32)
-        y_test = torch.as_tensor(data["y_test"], dtype=torch.long)
-        class_labels = data["classes"].astype(str).tolist()
-
-    if len(class_labels) != num_classes:
-        raise ValueError("Dataset class labels do not match the checkpoint's class count.")
-    class_names = [EIGENWORMS_CLASS_NAMES[label] for label in class_labels]
-    if len(y_test) == 0:
-        raise ValueError("The testing dataset is empty.")
-    if y_test.min().item() < 0 or y_test.max().item() >= num_classes:
-        raise ValueError("Test labels must be class indices from 0 to num_classes - 1.")
-
-    test_loader = create_testing_loader(X_test, y_test, stats, cfg.batch_size)
+    model, test_loader, class_names, saved_cfg, dataset_name = load_evaluation(cfg)
+    num_classes = len(class_names)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = create_model(saved_cfg.model, saved_cfg.model_params)
-    model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device)
 
     # predict() sets eval mode and disables gradient tracking.
@@ -58,22 +28,35 @@ def main(cfg: DictConfig) -> None:
     predictions = probabilities.argmax(dim=1).cpu().numpy()
     labels = labels.cpu().numpy()
     matrix = confusion_matrix(labels, predictions, labels=np.arange(num_classes))
-    overall_accuracy = 100.0 * float(matrix.trace()) / int(matrix.sum())
+    top_classes = probabilities.topk(min(5, num_classes), dim=1).indices.cpu().numpy()
+    top5_correct = (top_classes == labels[:, None]).any(axis=1)
+    class_f1 = f1_score(
+        labels, predictions, labels=np.arange(num_classes), average=None, zero_division=0,
+    )
+    overall = {
+        "scope": "overall",
+        "total": len(labels),
+        "top1_accuracy_percent": 100.0 * float(matrix.trace()) / int(matrix.sum()),
+        "top5_accuracy_percent": 100.0 * float(top5_correct.mean()),
+        # Macro F1 gives every dataset class equal weight; undefined F1 is zero.
+        "f1_score": float(class_f1.mean()),
+    }
 
     per_class = []
     for index, class_name in enumerate(class_names):
         total = int(matrix[index].sum())
-        correct = int(matrix[index, index])
+        mask = labels == index
         per_class.append(
             {
                 "class_name": class_name,
-                "correct": correct,
                 "total": total,
-                "accuracy_percent": 100.0 * correct / total if total else None,
+                "top1_accuracy_percent": 100.0 * int(matrix[index, index]) / total if total else None,
+                "top5_accuracy_percent": 100.0 * float(top5_correct[mask].mean()) if total else None,
+                "f1_score": float(class_f1[index]),
             }
         )
 
-    results_dir = Path("results") / f"{saved_cfg.model}_{dataset_name}"
+    results_dir = Path(to_absolute_path("results")) / f"{saved_cfg.model}_{dataset_name}"
     results_dir.mkdir(parents=True, exist_ok=True)
     with (results_dir / "accuracy.csv").open(
         "w", newline="", encoding="utf-8"
@@ -82,49 +65,56 @@ def main(cfg: DictConfig) -> None:
             file,
             fieldnames=[
                 "scope", "class_name",
-                "correct", "total", "accuracy_percent",
+                "total", "top1_accuracy_percent", "top5_accuracy_percent", "f1_score",
             ],
         )
         writer.writeheader()
-        writer.writerow(
-            {
-                "scope": "overall",
-                "correct": int(matrix.trace()),
-                "total": len(labels),
-                "accuracy_percent": overall_accuracy,
-            }
-        )
+        writer.writerow(overall)
         for item in per_class:
             writer.writerow({"scope": "per_class", **item})
 
-    figure = Figure(figsize=(7, 6))
+    row_totals = matrix.sum(axis=1, keepdims=True)
+    percentages = np.divide(
+        matrix * 100.0, row_totals,
+        out=np.zeros_like(matrix, dtype=float), where=row_totals != 0,
+    )
+    with (results_dir / "confusion_matrix.csv").open("w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["true_class / predicted_class (row %)", *class_names])
+        writer.writerows([name, *row] for name, row in zip(class_names, percentages))
+
+    # Grow the figure so every class label remains readable, including OpenWorm strains.
+    figure = Figure(figsize=(max(7, 3 + num_classes * 0.22), max(6, 2 + num_classes * 0.22)))
     axes = figure.subplots()
-    image = axes.imshow(matrix, cmap="Blues", vmin=0)
-    figure.colorbar(image, ax=axes, label="Test samples (count)")
+    image = axes.imshow(percentages, cmap="Blues", vmin=0, vmax=100)
+    figure.colorbar(image, ax=axes, label="Percentage of true-class samples",
+                    format=PercentFormatter(xmax=100), fraction=0.046, pad=0.04)
+    ticks = np.arange(num_classes)
     axes.set(
-        title=f"{saved_cfg.model.upper()} test-set confusion matrix",
+        title=f"{saved_cfg.model.upper()} test-set confusion matrix (row percentages)",
         xlabel="Predicted class",
         ylabel="True class",
-        xticks=np.arange(num_classes),
-        yticks=np.arange(num_classes),
-        xticklabels=class_names,
-        yticklabels=class_names,
+        xticks=ticks,
+        yticks=ticks,
+        xticklabels=[class_names[i] for i in ticks],
+        yticklabels=[class_names[i] for i in ticks],
     )
-    for row in range(num_classes):
-        for column in range(num_classes):
-            axes.text(
-                column, row, str(matrix[row, column]),
-                ha="center", va="center",
-                color="white" if matrix[row, column] > matrix.max() / 2 else "black",
-            )
+    axes.tick_params(axis="x", labelrotation=90)
+    axes.tick_params(axis="both", labelsize=7 if num_classes > 20 else 9)
+    if num_classes <= 20:
+        for row in range(num_classes):
+            for column in range(num_classes):
+                axes.text(
+                    column, row, f"{percentages[row, column]:.1f}%",
+                    ha="center", va="center",
+                    color="white" if percentages[row, column] > 50 else "black",
+                )
     figure.tight_layout()
     figure.savefig(results_dir / "confusion_matrix.png", dpi=150)
 
-    print(f"Test accuracy: {overall_accuracy:.2f}%")
-    for item in per_class:
-        accuracy = item["accuracy_percent"]
-        description = f"{accuracy:.2f}%" if accuracy is not None else "N/A (no samples)"
-        print(f"{item['class_name']} accuracy: {description}")
+    print(f"Test top-1 accuracy: {overall['top1_accuracy_percent']:.2f}%")
+    print(f"Test top-5 accuracy: {overall['top5_accuracy_percent']:.2f}%")
+    print(f"Test macro F1: {overall['f1_score']:.4f}")
     print(f"Saved evaluation results: {results_dir.resolve()}")
 
 

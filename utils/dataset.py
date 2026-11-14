@@ -14,18 +14,24 @@ def load_dataset(data_path):
 
     return X_train, y_train, X_test, y_test
 
-def create_validation_split(
+def load_unsplit_dataset(data_path):
+    """Load X/y arrays, encoding labels in sorted np.unique order."""
+    with np.load(data_path, allow_pickle=False) as data:
+        X = torch.as_tensor(data["X"], dtype=torch.float32)
+        _, labels = np.unique(data["y"], return_inverse=True)
+        y = torch.as_tensor(labels, dtype=torch.long)
+
+    return X, y
+
+def create_split(
     X_train,
     y_train,
-    val_fraction,
+    fraction,
     seed
 ):
-    if not 0 < val_fraction < 1:
-        raise ValueError("val_fraction must be between 0 and 1.")
-
     train_indices, val_indices = train_test_split(
         np.arange(len(y_train)),
-        test_size=val_fraction,
+        test_size=fraction,
         random_state=seed,
         stratify=y_train.numpy(),
     )

@@ -1,0 +1,6 @@
+# @package _global_
+
+dataset: openworm_skeleton_angles
+model_params:
+  in_channels: 48
+  num_classes: 178
