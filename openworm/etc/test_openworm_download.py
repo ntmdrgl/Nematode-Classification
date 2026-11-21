@@ -11,8 +11,8 @@ from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import openworm_download as downloader
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import openworm.openworm_download as downloader
 
 BODY = b"0123456789abcdefghij"
 

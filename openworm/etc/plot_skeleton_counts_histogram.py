@@ -18,8 +18,8 @@ from matplotlib.ticker import StrMethodFormatter
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-from openworm_strain_filter import load_records, normalize
+sys.path.insert(0, str(ROOT.parent))
+from openworm.openworm_strain_filter import load_records, normalize
 
 COLUMN = "adult_fed_op50_850_950s_30m_wait_count"
 

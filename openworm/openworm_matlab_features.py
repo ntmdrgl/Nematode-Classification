@@ -63,6 +63,12 @@ Identical repeated acquisition frame/time pairs are omitted, and trailing
 timestamps without mask images are ignored. Other invalid timestamps still fail.
 """
 
+# Allow both `python openworm/<script>.py` and package imports/module execution.
+if __package__ in (None, ""):
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
 import argparse
 import csv
 import os
@@ -81,10 +87,7 @@ import h5py
 from tqdm import tqdm
 from scipy.io import loadmat
 
-try:
-    from .openworm_manual_features import ROOT, preprocess_feature
-except ImportError:
-    from openworm_manual_features import ROOT, preprocess_feature
+from openworm.openworm_manual_features import ROOT, preprocess_feature
 
 FEATURES = ["SkeletonLength", "EndpointSeparation", "CentroidDisplacementFS0",
             "Endpoint1DisplacementFS0", "Endpoint2DisplacementFS0", "CentroidTotalDisplacement",
@@ -109,7 +112,8 @@ def matlab_string(path):
     return "'" + Path(path).resolve().as_posix().replace("'", "''") + "'"
 
 
-def preprocess_extracted(raw):
+def preprocess_extracted(raw, sample_times=None):
+    """Optionally sample at absolute video times for reference frame alignment."""
     names = [str(name) for name in np.asarray(raw["feature_names"]).reshape(-1)]
     values = np.asarray(raw["feature_values"], dtype=float).reshape(-1, 16)
     observed = np.asarray(raw["observed_mask"], dtype=bool).reshape(values.shape)
@@ -128,10 +132,18 @@ def preprocess_extracted(raw):
     available = np.where(observed, values, np.nan)
     expanded = np.full((len(full_frames), 16), np.nan)
     expanded[frames.astype(int)-int(frames[0])] = available
+    target_grid = None
+    if sample_times is not None:
+        requested = np.asarray(sample_times, dtype=float)
+        if (requested.ndim != 1 or not len(requested) or not np.isfinite(requested).all()
+                or np.any(np.diff(requested) <= 0) or requested[0] < times[0] - 1e-8
+                or requested[-1] > times[-1] + 1e-8):
+            raise ValueError("Alignment sample times must increase within the video time range")
+        target_grid = requested - times[0]
     features, statuses = [], []
     for i, name in enumerate(FEATURES):
         grid, result, status = preprocess_feature(full_times, expanded[:,i], np.ones(len(full_times), bool),
-                                                  name == "OrientationAngle", angle_period=180)
+                                                  name == "OrientationAngle", angle_period=180, grid=target_grid)
         if name != "OrientationAngle":
             result = np.maximum(result, 0)  # Preserve legacy nonnegative feature values.
         features.append(result)
@@ -158,7 +170,7 @@ def process_record(video, output_dir, matlab, max_frames=None, variant="old", sh
     pool = 'Threads' if pool_type == 'threads' else 'Processes'
     with tempfile.TemporaryDirectory(prefix="openworm-matlab-") as directory:
         mat_file = Path(directory) / "features.mat"
-        command = (f"addpath({matlab_string(Path(__file__).parent)}); "
+        command = (f"addpath({matlab_string(Path(__file__).parent / 'utils')}); "
                    f"{function}({matlab_string(video)}, {matlab_string(mat_file)}, "
                    f"{max_frames if max_frames else 'inf'}"
                    f"{', 32, ' + str(frame_workers) + ', ' + repr(pool) if variant == 'new' else ''});")

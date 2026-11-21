@@ -7,13 +7,13 @@ from unittest.mock import patch
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import openworm_trim as script
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import openworm.openworm_trim as script
 
 
 class TrimTests(unittest.TestCase):
     def test_individual_datasets_need_only_selected_source(self):
-        for dataset, width in script.DATASETS:
+        for dataset, width in script.ALL_DATASETS:
             with self.subTest(dataset=dataset), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 self.fixtures(root)
@@ -95,7 +95,8 @@ class TrimTests(unittest.TestCase):
             originals = {p: p.read_bytes() for p in root.glob("*.npz")}
             with patch.object(script, "MIN_SAMPLES", 3):
                 outputs = script.trim_datasets(root)
-            for path, (dataset, width) in zip(outputs, script.DATASETS):
+            self.assertEqual(len(outputs), len(script.ALL_DATASETS))
+            for path, (dataset, width) in zip(outputs, script.ALL_DATASETS):
                 self.assertEqual(path.name, f"openworm_{dataset}_trimmed_890_dataset.npz")
                 with np.load(path, allow_pickle=False) as archive:
                     self.assertEqual(archive["labels"].tolist(), ["c", "d"])

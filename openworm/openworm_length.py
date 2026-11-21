@@ -26,6 +26,12 @@ between the first and last sample is one sample interval shorter. NPZ array
 headers are read without decompressing the full feature arrays.
 """
 
+# Allow both `python openworm/<script>.py` and package imports/module execution.
+if __package__ in (None, ""):
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
 import argparse
 import csv
 from pathlib import Path
@@ -37,7 +43,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
-from openworm_dataset import DATASET_NAMES, OUTPUTS
+from openworm.openworm_dataset import DATASET_NAMES, OUTPUTS
 
 FIGURES = Path(__file__).resolve().parent / "figures"
 SAMPLE_SECONDS = 0.04

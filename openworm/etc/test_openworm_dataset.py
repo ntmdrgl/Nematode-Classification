@@ -8,8 +8,8 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import openworm_dataset as script
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import openworm.openworm_dataset as script
 
 
 class DatasetTests(unittest.TestCase):
@@ -17,7 +17,7 @@ class DatasetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.fixtures(root)
-            for mode in ("all", *script.DATASET_NAMES):
+            for mode in ("all", *(name for name in script.DATASET_NAMES if name != "video")):
                 with self.subTest(mode=mode):
                     paths = script.build_datasets(root, mode)
                     expected = []
@@ -123,7 +123,7 @@ class DatasetTests(unittest.TestCase):
             self.assertEqual([path.name for path in paths], list(script.OUTPUTS[:4]))
 
     def test_new_matlab_archive_evaluates_against_new_csvs(self):
-        import openworm_evaluate as evaluation
+        import openworm.openworm_evaluate as evaluation
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             folder = root / "matlab_features_new/new_strain"

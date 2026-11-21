@@ -14,8 +14,8 @@ import h5py
 import numpy as np
 from scipy.io import loadmat
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from openworm_matlab_features import matlab_executable, matlab_string, preprocess_extracted
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from openworm.openworm_matlab_features import matlab_executable, matlab_string, preprocess_extracted
 
 
 def main():
@@ -23,7 +23,7 @@ def main():
     parser.add_argument('--video', type=Path, required=True)
     parser.add_argument('--frame-workers', type=int, default=1)
     args = parser.parse_args()
-    scripts = Path(__file__).resolve().parents[1]
+    scripts = Path(__file__).resolve().parents[1] / "utils"
     original = scripts / 'openworm_matlab_features.m'
     before = hashlib.sha256(original.read_bytes()).digest()
     features = args.video.with_name(args.video.stem + '_features.hdf5')

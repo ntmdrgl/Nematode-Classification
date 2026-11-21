@@ -13,8 +13,8 @@ import h5py
 import numpy as np
 from scipy.io import loadmat, savemat
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import openworm_matlab_features as script
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import openworm.openworm_matlab_features as script
 
 
 class MatlabFeaturesTests(unittest.TestCase):
@@ -181,7 +181,7 @@ class MatlabFeaturesTests(unittest.TestCase):
 
     def test_collection_calculations_preserved_verbatim(self):
         old=(script.ROOT/'openworm/old/openworm_dataset_collection_batch_clean.m').read_text()
-        new=(script.ROOT/'openworm/openworm_matlab_features.m').read_text()
+        new=(script.ROOT/'openworm/utils/openworm_matlab_features.m').read_text()
         body=old[old.index('    % --- read file, preprocess info'):old.index('    feature_names = {')]
         body=body.replace('filenames_features(k)','featuresFile').replace('filenames(k)','videoFile')
         body=body.replace('min(num_frames, max_frames)','min(num_frames, maxFrames)')

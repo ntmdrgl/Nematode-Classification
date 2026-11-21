@@ -7,9 +7,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import openworm_zenodo_api as generator
-import openworm_strain_filter as consumer
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import openworm.openworm_zenodo_api as generator
+import openworm.openworm_strain_filter as consumer
 
 
 class PipelineTests(unittest.TestCase):

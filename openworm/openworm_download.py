@@ -46,6 +46,12 @@ Completed records skip silently, updating the record counter without opening
 an individual download bar. Size checks and completion logging still apply.
 """
 
+# Allow both `python openworm/<script>.py` and package imports/module execution.
+if __package__ in (None, ""):
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
 import argparse
 import ast
 import http.client
@@ -66,10 +72,7 @@ from urllib.request import Request, urlopen
 
 from tqdm import tqdm
 
-try:
-    from .openworm_strain_filter import load_records, matches_download_filter, strain_group, read_csv
-except ImportError:
-    from openworm_strain_filter import load_records, matches_download_filter, strain_group, read_csv
+from openworm.openworm_strain_filter import load_records, matches_download_filter, strain_group, read_csv
 
 ROOT = Path(__file__).resolve().parent
 OUTPUT = Path("E:/nematode classification/openworm")

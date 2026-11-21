@@ -27,6 +27,12 @@ Zero-length segments after smoothing invalidate that frame. Reruns replace CSVs.
 shows one total ETA; per-record stage bars are disabled during parallel runs.
 """
 
+# Allow both `python openworm/<script>.py` and package imports/module execution.
+if __package__ in (None, ""):
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
 import argparse
 import csv
 import multiprocessing
@@ -89,9 +95,10 @@ def spatial_resample(skeletons):
     return result
 
 
-def temporal_resample(times, values):
+def temporal_resample(times, values, grid=None):
     """Shared 25 Hz resampling and strict <0.25-second missing-data rule."""
-    grid = np.arange(int(np.floor(times[-1] / 0.04 + 1e-9)) + 1) * 0.04
+    grid = (np.arange(int(np.floor(times[-1] / 0.04 + 1e-9)) + 1) * 0.04
+            if grid is None else np.asarray(grid, dtype=float))
     good = np.isfinite(values.reshape(len(values), -1)).all(axis=1)
     coordinates = np.zeros((len(grid), *values.shape[1:]))
     valid = np.zeros(len(grid), dtype=bool)
