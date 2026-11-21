@@ -55,7 +55,8 @@ class EvaluationTests(unittest.TestCase):
             for workers in (1, 2):
                 self.assertEqual(script.evaluate(root, workers=workers, totals_only=True), expected)
             (root / script.DATASETS[3][1]).unlink()
-            self.assertEqual(script.evaluate(root, totals_only=True), expected[:3])
+            self.assertEqual(script.evaluate(root, totals_only=True),
+                             [row for row in expected if row["dataset"] != "matlab_features"])
 
     def test_parallel_matches_serial_and_skips_missing(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -94,7 +95,7 @@ class EvaluationTests(unittest.TestCase):
                 rows = script.evaluate(root)
             self.assertEqual(bar.call_args.kwargs["total"], 2)
             self.assertEqual(progress.update.call_count, 2)
-            self.assertEqual(bar.write.call_count, 3)
+            self.assertEqual(bar.write.call_count, 4)
             self.assertEqual(len(rows), 3)
             self.assertEqual(rows[0]["scope"], "total")
             self.assertTrue(all(row["dataset"] == "skeleton_angles" for row in rows))
@@ -146,14 +147,23 @@ class EvaluationTests(unittest.TestCase):
         np.savez(root / "openworm_matlab_features_dataset.npz", labels=np.array(["a"]),
                  record_ids=np.array(["record_1"]), record_keys=np.array(["data_0"]),
                  feature_names=np.array(names), data_0=np.zeros((2,16)))
+        path = root / "matlab_features_new/b/record_2.csv"
+        path.parent.mkdir(parents=True)
+        with path.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["time_s", *names, *[name+"_status" for name in names]])
+            writer.writerow([0, *range(16), "real", "interpolated", *(["zeroed"]*14)])
+        np.savez(root / "openworm_matlab_features_new_dataset.npz", labels=np.array(["b"]),
+                 record_ids=np.array(["record_2"]), record_keys=np.array(["data_0"]),
+                 feature_names=np.array(names), data_0=np.arange(16).reshape(1, 16))
 
     def test_per_strain_and_weighted_totals(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.fixtures(root)
             rows = script.evaluate(root)
-            self.assertEqual(len(rows), 11)
-            self.assertTrue(all(row["scope"] == "total" for row in rows[:4]))
+            self.assertEqual(len(rows), 13)
+            self.assertTrue(all(row["scope"] == "total" for row in rows[:5]))
             totals = {row["dataset"]: row for row in rows if row["scope"] == "total"}
             angles = totals["skeleton_angles"]
             self.assertEqual(angles["real_count"], 2*48)
@@ -168,6 +178,11 @@ class EvaluationTests(unittest.TestCase):
             self.assertEqual(totals["matlab_features"]["records"], 1)
             self.assertEqual(totals["matlab_features"]["real_count"], 30)
             self.assertEqual(totals["matlab_features"]["zeroed_count"], 2)
+            self.assertEqual(totals["matlab_features_new"]["records"], 1)
+            self.assertEqual(totals["matlab_features_new"]["features"], 16)
+            self.assertEqual(totals["matlab_features_new"]["real_count"], 1)
+            self.assertEqual(totals["matlab_features_new"]["interpolated_count"], 1)
+            self.assertEqual(totals["matlab_features_new"]["zeroed_count"], 14)
             for row in rows:
                 self.assertAlmostEqual(sum(float(row[state+"_percent"]) for state in script.STATES), 100, places=5)
 
@@ -183,6 +198,19 @@ class EvaluationTests(unittest.TestCase):
                 csv.writer(f).writerows(rows)
             with self.assertRaisesRegex(ValueError, "CSV values differ"):
                 script.evaluate(root)
+
+    def test_new_matlab_requires_its_own_matching_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixtures(root)
+            path = root / "matlab_features_new/b/record_2.csv"
+            path.write_text(path.read_text().replace("0,0,1,", "0,99,1,"))
+            for workers in (1, 2):
+                with self.assertRaisesRegex(ValueError, "CSV values differ"):
+                    script.evaluate(root, dataset="matlab_features_new", workers=workers)
+            path.unlink()
+            with self.assertRaises(FileNotFoundError):
+                script.evaluate(root, dataset="matlab_features_new")
 
 
 if __name__ == "__main__":

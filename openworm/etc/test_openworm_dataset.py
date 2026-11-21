@@ -53,7 +53,7 @@ class DatasetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.fixtures(root)
-            for dataset, columns in zip(script.DATASET_NAMES, (48, 47, 6, 16)):
+            for dataset, columns in zip(script.DATASET_NAMES, (48, 47, 6, 16, 16)):
                 with self.subTest(dataset=dataset), tempfile.TemporaryDirectory() as output:
                     output = Path(output)
                     folder = "manual_features" if dataset == "eigenworms" else dataset
@@ -91,13 +91,14 @@ class DatasetTests(unittest.TestCase):
             writer.writerow(["time_s", *[f"matlab_{i}" for i in range(16)], "matlab_0_status"])
             for i in range(3):
                 writer.writerow([i*.04, *range(16), "real"])
+        shutil.copytree(root / "matlab_features", root / "matlab_features_new")
 
     def test_labeled_ragged_records_and_feature_split(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.fixtures(root)
             paths = script.build_datasets(root)
-            self.assertEqual(len(paths), 4)
+            self.assertEqual(len(paths), 5)
             for path, columns in zip(paths, (48, 47, 6)):
                 with np.load(path, allow_pickle=False) as dataset:
                     self.assertEqual(dataset["labels"].tolist(), ["cb5", "n2 male"])
@@ -112,6 +113,33 @@ class DatasetTests(unittest.TestCase):
                 self.assertEqual(matlab["labels"].tolist(), ["cb5"])
                 self.assertEqual(matlab["data_000000"].shape, (3,16))
                 np.testing.assert_array_equal(matlab["data_000000"][0], np.arange(16))
+
+    def test_all_without_new_matlab_keeps_existing_four_datasets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixtures(root)
+            shutil.rmtree(root / "matlab_features_new")
+            paths = script.build_datasets(root)
+            self.assertEqual([path.name for path in paths], list(script.OUTPUTS[:4]))
+
+    def test_new_matlab_archive_evaluates_against_new_csvs(self):
+        import openworm_evaluate as evaluation
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            folder = root / "matlab_features_new/new_strain"
+            folder.mkdir(parents=True)
+            names = [f"matlab_{i}" for i in range(16)]
+            with (folder / "record_1.csv").open("w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["time_s", *names, *[name + "_status" for name in names]])
+                writer.writerow([0, *range(16), "real", "interpolated", *(["zeroed"] * 14)])
+            script.build_datasets(root, "matlab_features_new")
+            rows = evaluation.evaluate(root, dataset="matlab_features_new")
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]["real_count"], 1)
+            self.assertEqual(rows[0]["interpolated_count"], 1)
+            self.assertEqual(rows[0]["zeroed_count"], 14)
+            self.assertEqual(rows[1]["strain"], "new_strain")
 
     def test_unmatched_records_do_not_replace_exports(self):
         with tempfile.TemporaryDirectory() as directory:

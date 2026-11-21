@@ -42,6 +42,8 @@ Rerun the same command to resume .part files and skip size-verified completed
 files. Changing --workers preserves this progress. The display includes an
 overall ETA and an ETA for each active record; failures are logged in
 download_log.jsonl under the output directory.
+Completed records skip silently, updating the record counter without opening
+an individual download bar. Size checks and completion logging still apply.
 """
 
 import argparse
@@ -293,7 +295,10 @@ def run(plan, output_dir, retries, workers=4):
                         return
                     files = record["files"]
                     record_errors = []
-                    with tqdm(total=sum(file["size"] for file in files), initial=sum(local_bytes(file) for file in files),
+                    record_total = sum(file["size"] for file in files)
+                    record_initial = sum(local_bytes(file) for file in files)
+                    completed = all(file["path"].is_file() for file in files)
+                    with tqdm(total=record_total, initial=record_initial, disable=completed,
                               desc=f"{record['strain']} / {record['record_id']}", unit="B", unit_scale=True,
                               position=2 + slot, leave=False, bar_format=BAR_FORMAT) as current:
                         def advance(amount):

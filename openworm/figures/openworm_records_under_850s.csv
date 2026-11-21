@@ -1,0 +1,40 @@
+dataset,strain,record_id,length_seconds
+eigenworms,ql189,record_1013555,669.56
+eigenworms,ju298,record_1016703,747.68
+eigenworms,cb845,record_1026378,753.04
+eigenworms,ql50,record_1015634,813.44
+eigenworms,mt2248,record_1007613,813.96
+eigenworms,n2 hermaphrodite,record_1019669,815.04
+eigenworms,lsj1,record_1029366,816.84
+eigenworms,ju258,record_1018834,835.64
+eigenworms,aq908,record_1020833,840.16
+eigenworms,rb946,record_1005952,842.96
+eigenworms,mt2247,record_1021778,847.12
+eigenworms,n2 hermaphrodite,record_1028731,849.84
+eigenworms,ql22,record_1007101,849.84
+manual_features,ql189,record_1013555,669.56
+manual_features,ju298,record_1016703,747.68
+manual_features,cb845,record_1026378,753.04
+manual_features,ql50,record_1015634,813.44
+manual_features,mt2248,record_1007613,813.96
+manual_features,n2 hermaphrodite,record_1019669,815.04
+manual_features,lsj1,record_1029366,816.84
+manual_features,ju258,record_1018834,835.64
+manual_features,aq908,record_1020833,840.16
+manual_features,rb946,record_1005952,842.96
+manual_features,mt2247,record_1021778,847.12
+manual_features,n2 hermaphrodite,record_1028731,849.84
+manual_features,ql22,record_1007101,849.84
+skeleton_angles,ql189,record_1013555,669.56
+skeleton_angles,ju298,record_1016703,747.68
+skeleton_angles,cb845,record_1026378,753.04
+skeleton_angles,ql50,record_1015634,813.44
+skeleton_angles,mt2248,record_1007613,813.96
+skeleton_angles,n2 hermaphrodite,record_1019669,815.04
+skeleton_angles,lsj1,record_1029366,816.84
+skeleton_angles,ju258,record_1018834,835.64
+skeleton_angles,aq908,record_1020833,840.16
+skeleton_angles,rb946,record_1005952,842.96
+skeleton_angles,mt2247,record_1021778,847.12
+skeleton_angles,n2 hermaphrodite,record_1028731,849.84
+skeleton_angles,ql22,record_1007101,849.84

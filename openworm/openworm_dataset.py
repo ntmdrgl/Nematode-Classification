@@ -1,4 +1,4 @@
-"""Combine per-record CSVs into four labeled NPZ datasets (no pickle needed).
+"""Combine per-record CSVs into labeled NPZ datasets (no pickle needed).
 
 Run from the repository root:
     python openworm/openworm_dataset.py
@@ -8,6 +8,7 @@ Run from the repository root:
     python openworm/openworm_dataset.py --dataset manual_features
     python openworm/openworm_dataset.py --dataset eigenworms
     python openworm/openworm_dataset.py --dataset matlab_features
+    python openworm/openworm_dataset.py --dataset matlab_features_new
     python openworm/openworm_dataset.py --data-dir C:/path/to/data
 
 Reads skeleton_angles/<strain>/record_*.csv and manual_features/<strain>/record_*.csv.
@@ -17,6 +18,9 @@ openworm_eigenworms_dataset.npz (6 eigen projections), and
 openworm_matlab_features_dataset.npz (16 MATLAB features) in the data directory.
 MATLAB records are read from matlab_features/<strain>/record_*.csv and may be
 a smaller set, since records without videos were skipped during extraction.
+The new MATLAB variant is read separately from matlab_features_new/<strain>/record_*.csv
+and saved as openworm_matlab_features_new_dataset.npz (16 features). In all mode,
+this additional archive is included only when new-variant CSVs are present.
 49 skeleton points define 48 segment angles; no artificial 49th angle is added.
 
 Each archive contains feature_names, labels, record_ids, and record_keys.
@@ -56,8 +60,9 @@ ROOT = Path(__file__).resolve().parents[1]
 ANGLES = [f"angle_{i:02d}" for i in range(1, 49)]
 EIGEN = [f"eigen_projection_{i}" for i in range(1, 7)]
 OUTPUTS = ("openworm_skeleton_angles_dataset.npz", "openworm_manual_features_dataset.npz",
-           "openworm_eigenworms_dataset.npz", "openworm_matlab_features_dataset.npz")
-DATASET_NAMES = ("skeleton_angles", "manual_features", "eigenworms", "matlab_features")
+           "openworm_eigenworms_dataset.npz", "openworm_matlab_features_dataset.npz",
+           "openworm_matlab_features_new_dataset.npz")
+DATASET_NAMES = ("skeleton_angles", "manual_features", "eigenworms", "matlab_features", "matlab_features_new")
 PROGRESS_FORMAT = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed} elapsed, TOTAL ETA {remaining}, {rate_fmt}{postfix}]"
 
 
@@ -218,16 +223,21 @@ def build_datasets(data_dir, dataset="all", workers=1):
                     if name != "time_s" and not name.endswith("_status")]
     if len(matlab_names) != 16:
         raise ValueError("Expected 16 MATLAB feature columns")
-    paths = [data_dir / name for name in OUTPUTS]
+    new_files = record_files(data_dir / "matlab_features_new")
+    new_records = sorted(new_files)
+    new_names = selected_names(new_files[new_records[0]], "matlab_features_new") if new_records else None
+    paths = [data_dir / name for name in (OUTPUTS if new_records else OUTPUTS[:4])]
     temporary = [path.with_suffix(".npz.part") for path in paths]
     try:
         with ExitStack() as stack:
-            progress = stack.enter_context(total_progress(len(records) + len(matlab_records)))
+            progress = stack.enter_context(total_progress(len(records) + len(matlab_records) + len(new_records)))
             archives = [stack.enter_context(ZipFile(path, "w", compression=ZIP_DEFLATED, compresslevel=6))
                         for path in temporary]
             for archive, names in zip(archives, (ANGLES, manual_names, EIGEN)):
                 write_metadata(archive, names, records)
             write_metadata(archives[3], matlab_names, matlab_records)
+            if new_records:
+                write_metadata(archives[4], new_names, new_records)
             jobs = ((skeletons[record], features[record], all_features, manual_names) for record in records)
             for i, arrays in enumerate(ordered_results(read_paired_record, jobs, workers)):
                 record = records[i]
@@ -241,6 +251,13 @@ def build_datasets(data_dir, dataset="all", workers=1):
                 write_array(archives[3], f"data_{i:06d}", values)
                 progress.set_postfix_str(f"matlab_features: {record[0]}/{record[1]}", refresh=False)
                 progress.update(1)
+            if new_records:
+                jobs = ((new_files[record], "matlab_features_new", new_names) for record in new_records)
+                for i, values in enumerate(ordered_results(read_record, jobs, workers)):
+                    record = new_records[i]
+                    write_array(archives[4], f"data_{i:06d}", values)
+                    progress.set_postfix_str(f"matlab_features_new: {record[0]}/{record[1]}", refresh=False)
+                    progress.update(1)
         for source, destination in zip(temporary, paths):
             os.replace(source, destination)
     finally:

@@ -1,13 +1,21 @@
-function openworm_matlab_features(videoFile, outputFile, maxFrames)
+function openworm_matlab_features(videoFile, outputFile, maxFrames, readBlockFrames)
 % Extract the 16 features selected by the original preprocessing script.
 % Requires MATLAB Image Processing Toolbox. Example:
 % openworm_matlab_features('worm.hdf5', 'features.mat', 100)
-% Preserves the original collection frame loop and preprocessing definitions,
+% Preserves the original collection calculations and preprocessing definitions,
 % thresholds, regionprops, skeletonization, endpoint matching, indexing and units.
 % The companion *_features.hdf5 supplies coordinates, not features_timeseries.
 if nargin < 3
     maxFrames = inf;
 end
+if nargin < 4
+    readBlockFrames = 32;
+end
+assert(isscalar(readBlockFrames) && isfinite(readBlockFrames) && ...
+    readBlockFrames >= 1 && mod(readBlockFrames,1) == 0, 'Invalid readBlockFrames');
+% Batch only disk reads; frames are still calculated sequentially. A value of
+% 1 disables read batching for comparisons. Cache is bounded to about 32 MiB
+% (or one frame, if a single frame exceeds that budget).
 featuresFile = replace(string(videoFile), '.hdf5', '_features.hdf5');
 assert(isfile(videoFile), 'Missing video HDF5 file');
 assert(isfile(featuresFile), 'Missing companion features HDF5 file');
@@ -59,6 +67,11 @@ assert(exist('adapthisteq','file') ~= 0 && license('test','image_toolbox'), ...
     % mask size info 
     maskInfo = h5info(videoFile, '/mask');
     num_frames = maskInfo.Dataspace.Size(3);
+    block_frames = max(1, min(readBlockFrames, floor(32 * 1024^2 / ...
+        (prod(maskInfo.Dataspace.Size(1:2)) * maskInfo.Datatype.Size))));
+    frame_block_start = 0;
+    frame_block_end = 0;
+    closing_disk = strel('disk', 3);
     
     num_features = 23;
     num_stats = 8;
@@ -78,7 +91,15 @@ assert(exist('adapthisteq','file') ~= 0 && license('test','image_toolbox'), ...
     % --- loop frames 
     for i = 1:min(num_frames, maxFrames)
         % read current frame
-        frame = h5read(videoFile, '/mask', [1 1 i], [inf inf 1]);
+        % OPTIMIZED_READ_BEGIN: preserve exact pixels, class, order and indexing.
+        if i > frame_block_end
+            frame_block_start = i;
+            frame_block_end = min([num_frames, maxFrames, i + block_frames - 1]);
+            frame_block = h5read(videoFile, '/mask', [1 1 i], ...
+                [inf inf frame_block_end - frame_block_start + 1]);
+        end
+        frame = frame_block(:,:,i - frame_block_start + 1);
+        % OPTIMIZED_READ_END
         frame = rot90(frame);
     
         img=im2gray(frame); % grayscale the image
@@ -90,7 +111,7 @@ assert(exist('adapthisteq','file') ~= 0 && license('test','image_toolbox'), ...
         imgb  = ~imgb; % flip white and black
         imgb = imclearborder(imgb); % remove border
     
-        imgb = imclose(imgb, strel('disk', 3)); % close image with disk
+        imgb = imclose(imgb, closing_disk); % close image with disk
         imgb = imfill(imgb, 'holes'); % fill holes
     
         cc4_imgb = bwconncomp(imgb,4); %4-connectivity
@@ -227,7 +248,7 @@ assert(exist('adapthisteq','file') ~= 0 && license('test','image_toolbox'), ...
             lineMask(sub2ind(size(skel), ys, xs)) = true;
             
             lineOnSkel = lineMask & skel;
-            lineOnSkel = imdilate(lineOnSkel, strel('disk', 3));
+            lineOnSkel = imdilate(lineOnSkel, closing_disk);
             %}
     
             % --- Centroids of each connected blob in lineOnSkel ---
