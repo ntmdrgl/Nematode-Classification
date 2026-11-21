@@ -1,0 +1,6 @@
+# @package _global_
+
+dataset: openworm_manual_features
+model_params:
+  in_channels: 47
+  num_classes: 178

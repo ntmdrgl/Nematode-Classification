@@ -1,5 +1,8 @@
-from utils.dataset import load_dataset, create_validation_split, create_training_loader, create_testing_loader
+from utils.dataset import load_dataset, load_unsplit_dataset, create_split 
+from utils.dataset import create_training_loader, create_testing_loader, load_unsplit_dataset
+
 from utils.training import train_model, evaluate_model
+
 from models import create_model
 
 import math
@@ -22,11 +25,14 @@ def main(cfg: DictConfig) -> None:
 
     seed_everything(cfg.seed)
 
-    X_train, y_train, X_test, y_test = load_dataset(cfg.data_path)
-    X_train, y_train, X_val, y_val = create_validation_split(
+    data_path = f"data/{cfg.dataset}.npz"
+
+    X_train, y_train, X_test, y_test = load_dataset(data_path)
+
+    X_train, y_train, X_val, y_val = create_split(
         X_train,
         y_train,
-        val_fraction=0.2,
+        fraction=0.15/(1-0.15),
         seed=cfg.seed
     )
 
@@ -39,7 +45,6 @@ def main(cfg: DictConfig) -> None:
 
     train_loader, stats = create_training_loader(X_train, y_train, cfg.batch_size)
     val_loader = create_testing_loader(X_val, y_val, stats, cfg.batch_size)
-    # test_loader = create_testing_loader(X_test, y_test, stats, cfg.batch_size)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -66,10 +71,9 @@ def main(cfg: DictConfig) -> None:
         eps=1e-8
     )
 
-    dataset_name = Path(cfg.data_path).stem.lower()
-    checkpoint_dir = Path("checkpoints") / f"{cfg.model}_{dataset_name}"
+    checkpoint_dir = Path("checkpoints") / f"{cfg.model}_{cfg.dataset}"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = checkpoint_dir / f"{cfg.model}_{dataset_name}_best_val_loss.pt"
+    checkpoint_path = checkpoint_dir / f"{cfg.model}_{cfg.dataset}_best_val_loss.pt"
 
     best_val_loss = float("inf")
     best_epoch = None

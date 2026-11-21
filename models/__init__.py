@@ -9,7 +9,7 @@ def create_model(model, model_params):
             num_classes=model_params.num_classes
         )
 
-    elif model == "dilated_fcn":
+    elif model == "dfcn":
         return DilatedFCN(
             in_channels=model_params.in_channels,
             num_classes=model_params.num_classes,
