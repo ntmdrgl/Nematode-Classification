@@ -42,7 +42,15 @@ Rerun the same command to resume .part files and skip size-verified completed
 files. Changing --workers preserves this progress. The display includes an
 overall ETA and an ETA for each active record; failures are logged in
 download_log.jsonl under the output directory.
+Completed records skip silently, updating the record counter without opening
+an individual download bar. Size checks and completion logging still apply.
 """
+
+# Allow both `python openworm/<script>.py` and package imports/module execution.
+if __package__ in (None, ""):
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import argparse
 import ast
@@ -64,10 +72,7 @@ from urllib.request import Request, urlopen
 
 from tqdm import tqdm
 
-try:
-    from .openworm_strain_filter import load_records, matches_download_filter, strain_group, read_csv
-except ImportError:
-    from openworm_strain_filter import load_records, matches_download_filter, strain_group, read_csv
+from openworm.openworm_strain_filter import load_records, matches_download_filter, strain_group, read_csv
 
 ROOT = Path(__file__).resolve().parent
 OUTPUT = Path("E:/nematode classification/openworm")
@@ -293,7 +298,10 @@ def run(plan, output_dir, retries, workers=4):
                         return
                     files = record["files"]
                     record_errors = []
-                    with tqdm(total=sum(file["size"] for file in files), initial=sum(local_bytes(file) for file in files),
+                    record_total = sum(file["size"] for file in files)
+                    record_initial = sum(local_bytes(file) for file in files)
+                    completed = all(file["path"].is_file() for file in files)
+                    with tqdm(total=record_total, initial=record_initial, disable=completed,
                               desc=f"{record['strain']} / {record['record_id']}", unit="B", unit_scale=True,
                               position=2 + slot, leave=False, bar_format=BAR_FORMAT) as current:
                         def advance(amount):

@@ -1,3 +1,136 @@
+# Quick start: two metadata CSVs to five trimmed datasets
+
+Run these PowerShell commands **from the repository root**. Start with these two
+existing files; you do not need to fetch Zenodo metadata again:
+
+- `openworm/openworm_movement_zenodo_metadata.csv`
+- `openworm/openworm_parsed_all_fields.csv`
+
+The CSVs describe the recordings; they do not contain the images or feature
+measurements. Download the original HDF5s once, then let `openworm_pipeline.py`
+extract, align, trim, and save the five final datasets directly.
+
+## 1. Set up the environment
+
+Skip this block if your virtual environment and dependencies are already ready.
+Python 3.12+ and MATLAB with Image Processing Toolbox are required. The commands
+below use six MATLAB frame workers per session, which also requires Parallel
+Computing Toolbox; use `--frame-workers 1` if you do not have that toolbox.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install numpy scipy h5py tqdm
+```
+
+## 2. Download the original HDF5s using the two CSVs
+
+```powershell
+python openworm/openworm_download.py --metadata-csv openworm/openworm_movement_zenodo_metadata.csv --parsed-csv openworm/openworm_parsed_all_fields.csv --output-dir "E:/nematode classification/openworm" --file-type video-features --workers 4
+```
+
+This applies the existing record-selection filters and downloads both original
+mask-video `.hdf5` files and their companion `_features.hdf5` files into
+`<strain>/record_*/`. Rerunning resumes `.part` downloads and skips size-verified
+completed files. Skip this step if both HDF5 types are already downloaded.
+
+## 3. Generate only the five trimmed datasets
+
+```powershell
+python openworm/openworm_pipeline.py --dataset all --hdf5-dir "E:/nematode classification/openworm" --data-dir D:/data --output-dir "E:/nematode classification" --staging-dir C:/openworm-staging --workers 24 --matlab-workers 4 --frame-workers 6 --pool-type threads
+```
+
+That is the entire processing step. The pipeline reads the original HDF5s;
+it does not call `openworm_download.py` or `openworm_dataset.py`. No separate
+extraction commands, generated feature CSVs, `D:/data/video` exports, or untrimmed
+dataset NPZs are needed. `--dataset all` here runs exactly `skeleton_angles`,
+`manual_features`, `eigenworms`, `matlab_features_new`, and `video`.
+
+Change the folder options as needed:
+
+| Option | Purpose |
+|---|---|
+| `--hdf5-dir` | Original video and feature HDF5s; kept unchanged. |
+| `--data-dir` | Small manifests and ZIP recovery journals in `.openworm-pipeline`; no untrimmed datasets. |
+| `--output-dir` | Final trimmed archives and their resumable `.npz.part` files. |
+| `--staging-dir` | Internal SSD for bounded HDF5 copies and temporary trimmed record chunks. |
+
+The pipeline stages inputs one record at a time while up to 24 processing
+workers run. Staged HDF5 copies are deleted after each worker finishes, and
+trimmed chunks are deleted after merging. MATLAB uses up to four concurrent
+sessions with six frame workers each; reduce the worker counts for your machine.
+Use `--matlab PATH` if MATLAB is not found automatically.
+
+The final output folder contains:
+
+```text
+openworm_skeleton_angles_trimmed_890_dataset.npz
+openworm_manual_features_trimmed_890_dataset.npz
+openworm_eigenworms_trimmed_890_dataset.npz
+openworm_matlab_features_new_trimmed_890_dataset.npz
+openworm_video_trimmed_890_dataset.npz
+```
+
+All five datasets use the same retained records and common length on the 25 Hz
+skeleton timeline. Records must exceed 890 seconds; the pipeline computes the
+retained list and shortest common length from the available original clocks.
+Video stays a 3D `(frames, height, width)` array with the original pixel dtype and
+lossless bzip2 compression. It reads `/mask`, not `/full_data`. Gaps strictly
+shorter than 0.25 s use the nearest original image; longer or unbracketed gaps
+use black frames. Black placeholders do not necessarily match rows zeroed by
+skeleton-tracking or individual feature-calculation failures.
+
+## Stop and resume
+
+Press **Ctrl+C and wait for the script to exit**, then rerun the identical
+pipeline command. Resume is automatic; there is no `--resume` flag.
+
+- Matching completed datasets and committed records are skipped.
+- Finished worker chunks are reused; unfinished records restart.
+- You may change `--workers` without invalidating completed work.
+- Keep the same folders, dataset/reference selection, original inputs, output
+  `.npz.part` files, `D:/data/.openworm-pipeline`, and pending trimmed SSD chunks.
+- Do not run concurrent pipelines targeting the same folders.
+
+Recovery journals protect committed ZIP data when an append is interrupted.
+An older/damaged partial with no readable ZIP directory or pipeline resume
+metadata is preserved unchanged as `.npz.part.preserved-<unique ID>` before a
+fresh checkpoint starts. Such a file cannot supply trusted committed records;
+compatible finished worker chunks can still be reused. Valid checkpoints with
+different input/settings signatures are left untouched and reported as errors.
+No second complete video archive is created by normal checkpointing/merging.
+
+## Only regenerate or resume video against an existing skeleton dataset
+
+When your other datasets are already complete, use this command instead of the
+all-datasets command. It launches no MATLAB and writes only the trimmed video
+archive, with the same records, record order, and common frame count as the
+explicit skeleton reference:
+
+```powershell
+python openworm/openworm_pipeline.py --dataset video --hdf5-dir "E:/nematode classification/openworm" --reference-skeleton "E:/nematode classification/openworm_skeleton_angles_trimmed_890_dataset.npz" --data-dir D:/data --output-dir "E:/nematode classification" --staging-dir C:/openworm-staging --workers 24
+```
+
+Your existing reference has **5,418 records and 22,257 frames per record**.
+Rerun this same video-only command to resume it. Without an explicit reference,
+video-only mode checks the output folder, then the data folder, for the trimmed
+skeleton archive; if neither has one, it derives the selection from HDF5s.
+Resume support described here belongs to `openworm_pipeline.py`; the older
+`openworm_trim.py` video command does not checkpoint completed records.
+
+---
+
+## Folder layout
+
+Command-line entry points remain directly under `openworm/`, so the commands
+above are unchanged. Internal alignment, archive, staging, progress, scheduling,
+and video-processing helpers live in `openworm/utils/`, alongside the two MATLAB
+extraction implementations. The Python wrappers add that MATLAB folder to the
+MATLAB search path automatically. Regression tests and auxiliary checks stay in
+`openworm/etc/`; metadata CSVs remain under `openworm/`.
+
+---
+
 # OpenWorm CSV generation, strain counts and downloads
 
 Build just one NPZ dataset:

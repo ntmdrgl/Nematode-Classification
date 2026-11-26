@@ -4,6 +4,12 @@ By default, fetch the entire Zenodo community. Use --from-metadata PATH to
 rebuild from a saved metadata CSV without network access. Requires Python 3.10+.
 """
 
+# Allow both `python openworm/<script>.py` and package imports/module execution.
+if __package__ in (None, ""):
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
 import argparse
 import csv
 import json
@@ -19,10 +25,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-try:
-    from .openworm_strain_filter import load_records, write_csv, write_strain_counts
-except ImportError:
-    from openworm_strain_filter import load_records, write_csv, write_strain_counts
+from openworm.openworm_strain_filter import load_records, write_csv, write_strain_counts
 
 
 DATA_DIR = Path(__file__).resolve().parent

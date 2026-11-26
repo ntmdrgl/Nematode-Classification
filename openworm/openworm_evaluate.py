@@ -6,15 +6,17 @@ Run from the repository root:
     python openworm/openworm_evaluate.py --data-dir D:/data --workers 4
     python openworm/openworm_evaluate.py --data-dir D:/data --workers 4 --totals-only
     python openworm/openworm_evaluate.py --data-dir D:/data --dataset skeleton_angles --workers 4
+    python openworm/openworm_evaluate.py --dataset matlab_features_new --workers 4
     python openworm/openworm_evaluate.py --output data/openworm_evaluation.csv
 
 Uses each NPZ archive's record list and feature names, and reads provenance from
-the matching skeleton_angles/manual_features/matlab_features CSVs (NPZs have no status flags).
+the matching skeleton_angles/manual_features/matlab_features/matlab_features_new
+CSVs (NPZs have no status flags).
 Checks source feature values against the archive to reject stale/mismatched CSVs.
 
 Percentages count feature values, not averages of record percentages. Every
 time point contributes one value per feature: 48 for angles, 47 for manual
-features, 6 for eigenworms, and 16 for MATLAB features. All 48 angles share skeleton_status; manual and
+features, 6 for eigenworms, and 16 for each MATLAB variant. All 48 angles share skeleton_status; manual and
 eigenworm features use their individual <feature>_status columns. Measured zeros
 remain real; numeric zero is never used to infer status. Longer records receive
 proportionally more weight. Each dataset has a row per strain plus a total row.
@@ -32,9 +34,19 @@ combines counts. At most one record per worker is queued.
 --totals-only saves only the dataset total rows, omitting per-strain rows.
 All records are still evaluated to calculate the totals.
 --dataset defaults to all; select skeleton_angles, manual_features, eigenworms,
-or matlab_features to evaluate only that dataset. Each run replaces the output
+matlab_features, or matlab_features_new to evaluate only that dataset.
+The new variant uses openworm_matlab_features_new_dataset.npz and CSVs in
+matlab_features_new/<strain>/record_*.csv, independently of the old variant.
+Build its archive first with openworm_dataset.py --dataset matlab_features_new.
+Each run replaces the output
 CSV with the selected results.
 """
+
+# Allow both `python openworm/<script>.py` and package imports/module execution.
+if __package__ in (None, ""):
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import argparse
 import csv
@@ -53,6 +65,7 @@ DATASETS = (
     ("manual_features", "openworm_manual_features_dataset.npz", "manual_features", 47),
     ("eigenworms", "openworm_eigenworms_dataset.npz", "manual_features", 6),
     ("matlab_features", "openworm_matlab_features_dataset.npz", "matlab_features", 16),
+    ("matlab_features_new", "openworm_matlab_features_new_dataset.npz", "matlab_features_new", 16),
 )
 STATES = ("real", "interpolated", "zeroed")
 

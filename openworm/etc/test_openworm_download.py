@@ -11,8 +11,8 @@ from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import openworm_download as downloader
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import openworm.openworm_download as downloader
 
 BODY = b"0123456789abcdefghij"
 
@@ -153,6 +153,24 @@ class DownloadTests(unittest.TestCase):
         before = len(Handler.requests)
         downloader.transfer(file, lambda count: self.fail("Unexpected progress"))
         self.assertEqual(len(Handler.requests), before)
+
+    def test_completed_record_bar_is_disabled(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / 'complete.hdf5'
+            path.write_bytes(BODY)
+            plan = [dict(record_id='1', strain='cb5', files=[dict(
+                path=path, size=len(BODY), url='https://example.com/complete.hdf5')])]
+            real_tqdm = downloader.tqdm
+            with patch.object(downloader, 'tqdm', wraps=real_tqdm) as bars, \
+                    patch.object(downloader, 'urlopen', side_effect=AssertionError('must skip')), \
+                    patch('sys.stderr', new=io.StringIO()):
+                self.assertEqual(downloader.run(plan, root, retries=1, workers=1), 0)
+            record_bars = [call for call in bars.call_args_list if call.kwargs.get('desc') == 'cb5 / 1']
+            self.assertEqual(len(record_bars), 1)
+            self.assertTrue(record_bars[0].kwargs['disable'])
+            self.assertEqual(path.read_bytes(), BODY)
+            self.assertEqual(json.loads((root / 'download_log.jsonl').read_text())['status'], 'complete')
 
     def test_completed_partial_promoted_without_network(self):
         before = len(Handler.requests)

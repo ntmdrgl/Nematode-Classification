@@ -26,6 +26,12 @@ within short-gap-connected runs, then wrapped back to [-180, 180) after interpol
 shows one total ETA; per-record stage bars are disabled during parallel runs.
 """
 
+# Allow both `python openworm/<script>.py` and package imports/module execution.
+if __package__ in (None, ""):
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
 import argparse
 import csv
 from pathlib import Path
@@ -34,10 +40,7 @@ import h5py
 import numpy as np
 from tqdm import tqdm
 
-try:
-    from .openworm_skeleton_angles import ROOT, PROGRESS_FORMAT, read_record, spatial_resample, temporal_resample, run_records
-except ImportError:
-    from openworm_skeleton_angles import ROOT, PROGRESS_FORMAT, read_record, spatial_resample, temporal_resample, run_records
+from openworm.openworm_skeleton_angles import ROOT, PROGRESS_FORMAT, read_record, spatial_resample, temporal_resample, run_records
 
 NON_FEATURES = {
     "timestamp", "timestamp_raw", "timestamp_time", "frame_number", "skeleton_id",
@@ -55,7 +58,7 @@ def feature_names(table):
             and table.dtype[name].kind in "fiu"]
 
 
-def preprocess_feature(times, values, source_valid, angular=False, angle_period=360):
+def preprocess_feature(times, values, source_valid, angular=False, angle_period=360, grid=None):
     values = values.astype(float).copy()
     values[~source_valid] = np.nan
     if angular:
@@ -64,7 +67,7 @@ def preprocess_feature(times, values, source_valid, angular=False, angle_period=
         breaks = np.flatnonzero(np.diff(times[good]) >= 0.25 - 1e-10) + 1
         for indices in np.split(good, breaks):
             values[indices] = np.unwrap(values[indices] * 2*np.pi / angle_period) * angle_period / (2*np.pi)
-    grid, result, valid, status = temporal_resample(times, values)
+    grid, result, valid, status = temporal_resample(times, values, grid=grid)
     if angular:
         result[valid] = (result[valid] + angle_period/2) % angle_period - angle_period/2
     return grid, result, status
