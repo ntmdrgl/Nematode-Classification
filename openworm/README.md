@@ -477,3 +477,106 @@ Use `--help` for input/output path overrides and other options. Default paths ar
 relative to the script, so it can also be run from another working directory.
 The original notebook remains available for its exploratory stage/sex and bucket
 tables.
+
+ResNet-34 frame features:
+
+```powershell
+python openworm/openworm_resnet_features.py --workers 2
+python openworm/openworm_resnet_features.py --estimate-only
+```
+
+Defaults read `E:/nematode classification/openworm_video_trimmed_890_dataset.npz`
+and write `openworm_resnet_features_dataset.npz` in the same folder. Install
+`torch torchvision numpy pillow tqdm` in the Python environment first. ImageNet weights
+download on first use. Every grayscale uint8 frame is converted to RGB and passed
+through the pretrained weights' resize/crop/normalization. No frames are sampled
+or dropped. Each `data_<index>` becomes `(frames, 512)` float32; record keys,
+labels, IDs and timestamps are preserved. Features are global average pool outputs.
+
+Two independent processes stream/decompress records and perform inference in
+parallel. CUDA is selected if available; both workers share that GPU. Reduce
+`--workers 1 --batch-size 16` for limited GPU memory, or select `--device cpu`.
+`--threads` sets CPU inference threads per worker. `--input` and `--output`
+override paths. Header-only `--estimate-only` needs only standard Python.
+
+Progress is persisted every 30 seconds per worker and at record completion in the adjacent `.work` folder. Ctrl+C retains these checkpoints; batches since the last checkpoint may repeat. Rerun to
+resume; wait for the previous process to exit first. Input identity and extraction
+settings are checked, and an OS lock prevents concurrent writers. A resumed
+compressed record must decompress past completed frames before inference resumes.
+The final NPZ is published atomically; interrupted final packing restarts using
+the saved features. Keep the `.work` directory until completion; it is retained
+and may be removed manually after verifying the output. Allow approximately twice
+the uncompressed feature size for checkpoints plus the final archive. Final ZIP
+compression savings depend on the extracted values.
+
+ResNet extraction displays archive scanning progress, a combined frame progress
+bar across workers with elapsed time, frame rate and ETA, and a byte progress
+bar with ETA while packing the final NPZ. Resumed frames count toward completion;
+the extraction ETA uses throughput from the current run and excludes final packing.
+
+Performance: each worker prefetches one batch, overlapping ZIP decompression and
+CPU image transforms with GPU inference. Checkpoints default to every 30 seconds
+(`--checkpoint-seconds`), avoiding forced disk synchronization every batch. Try
+`--workers 2 --batch-size 128 --threads 4` on a 16 GB GPU; reduce batch size if
+CUDA runs out of memory. Compare sustained frame rates after several minutes;
+resumed records first decompress past saved frames. The extraction ETA excludes
+final packing and may fluctuate during startup.
+
+Bounded ResNet profiling (does not write features or change checkpoints):
+
+```powershell
+python openworm/openworm_resnet_features.py --device cuda --batch-size 128 --threads 4 --profile-batches 20
+```
+
+Reports read/decompression, preprocessing, CPU-to-GPU transfer, inference and
+GPU-to-CPU transfer times after model warmup, plus the original versus batched
+preprocessing comparison. Profiling measures sequential stages on the first
+record; it excludes checkpoint writes and multiworker/storage contention. Normal
+extraction vectorizes tensor conversion and normalization across each batch,
+retaining the original PIL resize/crop and float32 normalization. Each worker
+checks exact preprocessing equivalence on its first batch before saving features.
+
+Resize/crop preprocessing now uses four image threads per record worker by
+default (`--preprocess-workers 4`), preserving input order and the original PIL
+operations. `--preprocess-workers 1` disables image threading for a direct profile
+comparison. This setting can change across resumes; extracted feature semantics
+are unchanged and the first-batch exact-reference check remains enabled. With two
+record workers, four image threads each means eight image preprocessing threads
+in total, in addition to PyTorch CPU threads. Benchmark 4 versus 8 image threads
+if preprocessing still dominates; higher counts may contend for memory/CPU.
+
+Pack completed ResNet checkpoints without importing PyTorch, loading ResNet,
+downloading weights, starting model workers or using CUDA:
+
+```powershell
+python openworm/openworm_resnet_features.py --pack-only
+```
+
+This requires the original input archive for metadata and frame counts, plus the
+matching `.work` manifest, completed JSON checkpoints and float32 feature arrays.
+It checks completion, array headers and file lengths before packing. Missing or
+incomplete checkpoints cause an error rather than starting inference. CPU ZIP
+packing retains its byte progress bar/ETA and atomic final-file publication.
+
+Final NPZ compression is parallel on CPU, including in `--pack-only` mode:
+
+```powershell
+python openworm/openworm_resnet_features.py --pack-only --pack-workers 4
+```
+
+`--pack-workers` defaults to 4 and controls CPU compression threads independently
+of extraction `--workers`. Each compressor streams one checkpoint to a temporary
+compressed part; one writer copies its compressed payload into the final archive
+without recompression. The number of queued parts is bounded by the worker count;
+parts are removed after merging and on exit. Allow temporary space for approximately
+one compressed record per packing worker. Checkpoints remain unchanged. More
+threads can improve CPU-bound compression but may slow a disk-bound run. Packing
+progress measures source feature bytes compressed; the final merge can briefly
+continue after it reaches 100%. Interrupted packing restarts from checkpoints.
+
+`--pack-only` now skips the original video-array header scan. It reads record
+names from the ZIP directory (without opening video entries), obtains frame
+counts from feature checkpoint headers, validates completion markers and file
+lengths, and then packs. The original archive is still required for its directory,
+source identity check and labels/timestamps/other metadata. No original video
+payloads are read during pack-only startup or packing.
