@@ -61,6 +61,6 @@ def split_dataset(name, workers=16):
 
 
 if __name__ == "__main__":
-    for name in ("eigenworms", "manual_features", "skeleton_angles"):
+    for name in ("matlab_features",):
     # for name in tqdm(("eigenworms",), desc="Datasets"):
         split_dataset(name)

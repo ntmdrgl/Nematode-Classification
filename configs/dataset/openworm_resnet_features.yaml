@@ -1,0 +1,6 @@
+# @package _global_
+
+dataset: openworm_resnet_features
+model_params:
+  in_channels: 512
+  num_classes: 178
