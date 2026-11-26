@@ -1,5 +1,4 @@
-from utils.dataset import load_dataset, load_unsplit_dataset, create_split 
-from utils.dataset import create_training_loader, create_testing_loader, load_unsplit_dataset
+from utils.batched_dataset import create_dataset_loaders
 
 from utils.training import train_model, evaluate_model
 
@@ -25,26 +24,14 @@ def main(cfg: DictConfig) -> None:
 
     seed_everything(cfg.seed)
 
-    data_path = f"data/{cfg.dataset}.npz"
-
-    X_train, y_train, X_test, y_test = load_dataset(data_path)
-
-    X_train, y_train, X_val, y_val = create_split(
-        X_train,
-        y_train,
-        fraction=0.15/(1-0.15),
-        seed=cfg.seed
-    )
-
-    print("Train data:", X_train.shape)
-    print("Train labels:", y_train.shape)
-    print("Valid data:", X_val.shape)
-    print("Valid labels:", y_val.shape)
-    print("Test data:", X_test.shape)
-    print("Test labels:", y_test.shape, "\n")
-
-    train_loader, stats = create_training_loader(X_train, y_train, cfg.batch_size)
-    val_loader = create_testing_loader(X_val, y_val, stats, cfg.batch_size)
+    data_path = cfg.get("data_path") or f"data/{cfg.dataset}.npz"
+    train_loader, val_loader, test_loader, stats = create_dataset_loaders(
+        data_path, cfg.batch_size, cfg.seed, cfg.get("num_workers", 0))
+    y_train = train_loader.dataset.labels
+    for name, loader in (("Train", train_loader), ("Valid", val_loader), ("Test", test_loader)):
+        print(f"{name} data: {loader.dataset.shape}; labels: {loader.dataset.labels.shape}")
+    if train_loader.dataset.shape[1] != cfg.model_params.in_channels:
+        raise ValueError("Dataset channels do not match model in_channels")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

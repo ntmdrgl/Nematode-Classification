@@ -5,6 +5,29 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from sklearn.model_selection import train_test_split
 
+def load_normalization(data_path, seed):
+    """Load cached statistics, ensuring they match the training/validation split."""
+    with np.load(data_path, allow_pickle=False) as data:
+        if "train_mean" not in data and "train_std" not in data:
+            return None
+        if (int(data["normalization_version"]) != 1
+                or int(data["normalization_seed"]) != seed
+                or float(data["normalization_fraction"]) != .15 / (1 - .15)):
+            raise ValueError("Cached normalization does not match this training split")
+        fit, validation = train_test_split(np.arange(len(data["y_train"])),
+            test_size=.15 / (1 - .15), random_state=seed, stratify=data["y_train"])
+        if (not np.array_equal(fit, data["normalization_train_indices"])
+                or not np.array_equal(validation, data["normalization_val_indices"])):
+            raise ValueError("Cached normalization indices do not match this training split")
+        stats = {key: torch.as_tensor(data[f"train_{key}"], dtype=torch.float32)
+                 for key in ("mean", "std")}
+    if (stats["mean"].ndim != 3 or stats["mean"].shape[0] != 1
+            or stats["mean"].shape[2] != 1 or stats["std"].shape != stats["mean"].shape
+            or not all(torch.isfinite(value).all() for value in stats.values())
+            or (stats["std"] <= 0).any()):
+        raise ValueError("Invalid cached mean/std")
+    return stats
+
 def load_dataset(data_path):
     with np.load(data_path, allow_pickle=False) as data:
         X_train = torch.as_tensor(data["X_train"], dtype=torch.float32)
@@ -50,14 +73,15 @@ def create_training_loader(
     X_train,
     y_train,
     batch_size: 16,
+    stats=None,
 ):
-    mean = X_train.mean(dim=(0, 2), keepdim=True)
-    std = X_train.std(dim=(0, 2), correction=0, keepdim=True).clamp_min(1e-8)
-    
-    stats = {
-        "mean": mean,
-        "std": std,
-    }
+    if stats is None:
+        stats = {
+            "mean": X_train.mean(dim=(0, 2), keepdim=True),
+            "std": X_train.std(dim=(0, 2), correction=0, keepdim=True).clamp_min(1e-8),
+        }
+    if any(tuple(value.shape) != (1, X_train.shape[1], 1) for value in stats.values()):
+        raise ValueError("Normalization channel count does not match the training data")
 
     X_train = (X_train - stats["mean"]) / stats["std"]
 

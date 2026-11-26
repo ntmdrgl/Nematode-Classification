@@ -1,0 +1,6 @@
+# @package _global_
+
+dataset: openworm_matlab_features
+model_params:
+  in_channels: 16
+  num_classes: 178

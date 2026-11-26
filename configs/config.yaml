@@ -8,6 +8,7 @@ model_params: {}
 
 epochs: 200
 batch_size: 32
+num_workers: 0 # Each worker can prefetch one full batch; 0 keeps RAM use lowest.
 patience: 10
 
 learning_rate: 0.001
